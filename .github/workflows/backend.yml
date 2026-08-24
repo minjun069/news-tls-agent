@@ -1,0 +1,41 @@
+name: backend
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: uv 설치
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: 의존성 설치
+        run: uv sync
+
+      # AGENTS.md §3 — 코드 컨벤션
+      - name: 린트
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+
+      # AGENTS.md §1 · §2.1 — 아키텍처 경계와 계층 규칙
+      - name: 계층 규칙
+        run: uv run lint-imports
+
+      # AGENTS.md §5 — 하네스 문서 토큰 예산
+      - name: 문서 토큰 예산
+        run: uv run python .claude/hooks/check_doc_budget.py --verbose
+
+      # pytest는 테스트가 없으면 exit 5. 스켈레톤 단계에서는 실패로 보지 않는다.
+      - name: 단위 테스트
+        run: uv run pytest backend/tests/unit || [ $? -eq 5 ]
+
+  # 통합 테스트(MS-SQL·Qdrant 서비스 컨테이너)는 S9에서 추가한다.
+  # docs/FEEDBACK_LOOPS.md L3 참조.

@@ -1,0 +1,114 @@
+[project]
+name = "news-tls-agent"
+version = "0.1.0"
+description = "뉴스 타임라인 요약 에이전트"
+requires-python = ">=3.12"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "ruff>=0.14",
+    "pytest>=8.3",
+    "import-linter>=2.3",
+]
+
+# ─────────────────────────────────────────────────────────────
+# ruff — AGENTS.md §3 코드 컨벤션의 기계 검사판
+# ─────────────────────────────────────────────────────────────
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+extend-exclude = ["web", "data", ".venv"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W", "F",   # pycodestyle · pyflakes
+    "I",             # import 정렬
+    "N",             # §3 snake_case · PascalCase
+    "UP",            # 구버전 문법 갱신
+    "B",             # 흔한 버그 패턴
+    "ANN",           # §3 타입 힌트 필수
+    "FA",            # §3 from __future__ import annotations 필수
+    "G", "LOG",      # §3 지연 포맷 로깅 (f-string 로깅 금지)
+    "BLE", "TRY",    # §3 예외를 삼키지 않는다
+    "S",             # §7 API 키·접속정보 하드코딩
+    "TID",           # 상대 import 금지
+    "RUF",
+]
+ignore = [
+    "E501",    # 줄 길이는 formatter가 처리
+    "ANN401",  # **kwargs: Any 허용
+    "TRY003",  # 예외 메시지를 호출부에 쓰는 것 허용
+]
+
+[tool.ruff.lint.per-file-ignores]
+"backend/tests/**" = ["ANN", "S101"]  # 테스트는 힌트·assert 강제 안 함
+"backend/api/**" = ["B008"]           # FastAPI Depends() 기본값 관용
+"**/__init__.py" = ["F401", "I002"]   # 재수출 허용 · 빈 패키지 파일 예외
+
+[tool.ruff.lint.isort]
+known-first-party = ["backend"]
+required-imports = ["from __future__ import annotations"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+# ─────────────────────────────────────────────────────────────
+# import-linter — AGENTS.md §1 경계 · §2.1 계층 규칙의 기계 검사판
+# 위반하면 `lint-imports`가 실패한다. 문서가 아니라 게이트다.
+# ─────────────────────────────────────────────────────────────
+[tool.importlinter]
+root_packages = ["backend"]
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "§2.1 계층 방향: api·mcp_server → app → core"
+type = "layers"
+layers = [
+    "backend.api : backend.mcp_server",
+    "backend.app",
+    "backend.core",
+]
+
+[[tool.importlinter.contracts]]
+name = "§2.1 core는 외부 프레임워크를 모른다"
+type = "forbidden"
+source_modules = ["backend.core"]
+forbidden_modules = [
+    "fastapi",
+    "starlette",
+    "langgraph",
+    "sqlalchemy",
+    "qdrant_client",
+    "google",
+]
+
+[[tool.importlinter.contracts]]
+name = "§2.1 app은 웹 프레임워크를 모른다"
+type = "forbidden"
+source_modules = ["backend.app"]
+forbidden_modules = ["fastapi", "starlette"]
+
+[[tool.importlinter.contracts]]
+name = "§2.1 infra import는 조립 지점에서만 (deps.py · server.py · scripts · integration)"
+type = "forbidden"
+source_modules = [
+    "backend.core",
+    "backend.app",
+    "backend.api.routes",
+    "backend.mcp_server.tools",
+]
+forbidden_modules = ["backend.infra"]
+
+[[tool.importlinter.contracts]]
+name = "§2.1 infra는 app·api를 참조하지 않는다"
+type = "forbidden"
+source_modules = ["backend.infra"]
+forbidden_modules = ["backend.app", "backend.api", "backend.mcp_server"]
+
+# ─────────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["backend/tests"]
+addopts = "-q --strict-markers"
+markers = ["integration: 저장소·컨테이너가 필요한 테스트"]

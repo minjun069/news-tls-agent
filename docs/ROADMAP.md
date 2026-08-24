@@ -18,16 +18,24 @@ S1 기반 ─┬─ S2 데이터 계층 ─┬─ S4 MCP 서버 ─ S5 생성 �
 ## S1 · 기반 구축
 
 ### S1-1 프로젝트 초기화
-- [ ] GitHub 리포 `news-tls-agent` 생성
-- [ ] 디렉토리 스켈레톤 (`AGENTS.md` §2), `.env.example`, `.gitignore`, `backend/pyproject.toml`
-- [ ] `CLAUDE.md` — `@AGENTS.md` 한 줄
-- [ ] `data/raw/.gitkeep` — 원본 데이터 투입 위치
+- [x] GitHub 리포 `news-tls-agent` 생성
+- [x] 디렉토리 스켈레톤 (`AGENTS.md` §2), `.env.example`, `.gitignore`
+- [x] `pyproject.toml` — 리포 루트. `backend/__init__.py`가 있어 패키지 루트가 리포 루트다
+- [x] `CLAUDE.md` — `@AGENTS.md` 한 줄
+- [x] `data/raw/.gitkeep` — 원본 데이터 투입 위치
 
 ### S1-2 개발 하네스
-- [ ] `AGENTS.md` — 코드 컨벤션, 디렉토리 구조, 검증 명령, 금지사항
-- [ ] `.claude/settings.json` — 권한 allowlist
-- [ ] 편집 후 포맷 훅
+- [x] `AGENTS.md` — 코드 컨벤션, 디렉토리 구조, 검증 명령, 금지사항
+- [x] ruff 규칙이 §3 컨벤션을 강제 (ANN·I002·G·BLE/TRY·N·S)
+- [x] **import-linter 계약이 §1 경계와 §2.1 계층을 강제** — 계약 5개
+- [x] `Makefile` — `make check`가 커밋 전 게이트
+- [x] `.claude/settings.json` — 권한 allowlist
+- [x] 편집 후 검사 훅 (`.claude/hooks/on-edit.sh`, exit 2로 에이전트에 피드백)
+- [x] **가드 검증** — 일부러 위반을 넣어 5개 계약과 8개 린트 규칙이 잡는 것을 확인
 - [ ] **문서 토큰 예산 확인** — `AGENTS.md` + `CLAUDE.md` 합계 3,000 토큰 이하 (PRD §3.4)
+
+> 계층 계약을 코드가 0줄일 때 도입한 이유: 위반이 없는 상태에서 켜면 통과하지만,
+> 코드가 쌓인 뒤 켜면 그때부터는 리팩터링이다.
 
 ### S1-3 CI 골격
 - [ ] `.github/workflows/backend.yml` — ruff, pytest, **계층 규칙 검사** (`AGENTS.md` §2.1)
@@ -37,9 +45,9 @@ S1 기반 ─┬─ S2 데이터 계층 ─┬─ S4 MCP 서버 ─ S5 생성 �
 > CI를 지금 붙이는 이유: 코드가 쌓인 뒤 도입하면 이미 깨진 상태에서 시작한다.
 
 ### S1-4 인프라 기동
-- [ ] SQL Server Developer Edition + SSMS 설치, **TCP/IP 프로토콜 활성화**
+- [x] SQL Server Developer Edition + SSMS 설치, **TCP/IP 프로토콜 활성화**
 - [ ] ODBC Driver 18 확인, DB `newsagent` 생성
-- [ ] Docker Desktop 설치
+- [x] Docker Desktop 설치
 - [ ] `docker-compose.yml` — `qdrant`(기본) · `mssql`·`api`·`mcp`·`web`(profile `full`)
 - [ ] `.env.example` — 모드 A/B/C 접속 정보 (TECH_DESIGN §4.1)
 

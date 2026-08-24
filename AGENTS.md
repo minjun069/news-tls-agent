@@ -2,6 +2,15 @@
 
 작업 전에 이 문서를 읽는다. 상세는 `docs/`를 참조한다.
 
+## 0. 이 프로젝트
+
+뉴스 아카이브를 근거로 사건 타임라인을 만들고, 각 분기점에 근거 기사를 귀속시켜 신뢰 가능한 형태로 제공한다.
+
+학습 목표는 **MCP · MS-SQL · 벡터 DB 실무 경험**이며, **§1의 경계가 그 목표 자체**다. 편의를 위해 넘으면 프로젝트의 이유가 사라진다.
+
+무엇을 만드는가 → `docs/REQUIREMENTS.md` · 어떻게 만드는가 → `docs/TECH_DESIGN.md`
+작업 방식과 검증 루프 → `docs/FEEDBACK_LOOPS.md`
+
 ## 1. 아키텍처 경계 — 위반 금지
 
 이 프로젝트의 존재 이유가 이 경계다. 편의를 위해 넘지 않는다.
@@ -16,9 +25,14 @@ MCP 서버가 죽어도 저장소 직접 조회로 우회하지 않는다. 장�
 
 ## 2. 디렉토리
 
+아래는 **목표 구조**다. 아직 없는 파일은 `docs/ROADMAP.md`의 스프린트에서 생긴다.
+표에 없는 디렉토리를 새로 만들지 않는다 — 필요하면 이 표를 먼저 고친다.
+
 ```
 AGENTS.md              규칙 원본 (CLAUDE.md가 @로 참조)
 Makefile               진입점
+pyproject.toml         ruff · pytest · import-linter 계약 (§2.1의 기계 검사판)
+.claude/               settings.json · hooks/on-edit.sh (편집 직후 검사)
 docker-compose.yml     qdrant(기본) · mssql·api·mcp·web(profile: full)
 data/raw/              원본 (Git 제외, 사용자 투입)
 docs/                  분리 문서 · decisions/
@@ -97,19 +111,24 @@ web/                   Vue 3 + Vite
 ## 4. 명령
 
 ```bash
-docker compose up -d                   # 개발: qdrant만
-docker compose --profile full up -d    # 클린 클론 검증·데모 (NFR-13)
-backend/db/migrate.sh                  # 미적용 마이그레이션만 실행
+make install                           # .venv 생성 (uv)
+make check                             # 커밋 전 게이트 — 포맷·린트·계층·단위테스트
+make fmt                               # 포맷 + 자동 수정
+make arch                              # 계층 규칙만 (§1 · §2.1)
+make test-all                          # 통합 포함
 
-ruff check . && ruff format .
-pytest backend/tests/unit              # 저장소 불필요
-pytest backend/tests                   # 통합 포함
+make up                                # 개발: qdrant만
+make up-full                           # 클린 클론 검증·데모 (NFR-13)
+backend/db/migrate.sh                  # 미적용 마이그레이션만 실행
 
 npx @modelcontextprotocol/inspector python backend/mcp_server/server.py
 cd web && npx vue-tsc --noEmit && npm run build
 ```
 
-커밋 전 `ruff check .`와 `pytest backend/tests/unit`이 통과해야 한다.
+**커밋 전 `make check`가 통과해야 한다.** §2.1 계층 규칙과 §3 컨벤션은
+`pyproject.toml`의 ruff·import-linter 계약으로 기계 검사되며, 파일 편집 직후
+`.claude/hooks/on-edit.sh`가 같은 검사를 돌려 위반을 즉시 되돌린다.
+검사를 우회하지 않는다 — 규칙을 바꿔야 한다면 계약을 먼저 고친다.
 
 ## 5. 문서 규칙
 
@@ -124,6 +143,7 @@ cd web && npx vue-tsc --noEmit && npm run build
 | HTTP 계약 | `docs/API.md` |
 | MCP 툴 계약 | `docs/MCP_TOOLS.md` |
 | 프롬프트 | `docs/AI_SPEC.md` |
+| **검증 루프·제안 규칙** | `docs/FEEDBACK_LOOPS.md` |
 
 **구조를 바꾸는 변경은 같은 커밋에서 관련 문서를 갱신한다.** 이전 프로젝트에서 구조 문서가 삭제된 모듈을 계속 설명하는 상태로 방치되어, 새 세션이 매번 잘못된 전제로 시작하는 문제가 있었다.
 
@@ -131,7 +151,18 @@ cd web && npx vue-tsc --noEmit && npm run build
 
 **이 문서와 `CLAUDE.md`의 합계는 3,000 토큰을 넘지 않는다.** 매 세션 소비되므로 비대해지면 순손실이다.
 
-## 6. 커밋
+## 6. 브랜치 · 커밋 · PR
+
+`main`은 보호된다. 직접 push하지 않는다.
+
+```
+feat/<스프린트>-<요약>      feat/s2-repository
+fix/<요구사항 ID>           fix/ISS-003
+docs/<주제>                 docs/mcp-tools
+chore/<주제>
+```
+
+커밋 메시지
 
 ```
 <type>(<요구사항 ID>): <요약>
@@ -142,6 +173,13 @@ ADR-0003 참조
 ```
 
 `feat` `fix` `refactor` `test` `docs` `chore`
+
+PR
+
+- 스프린트 단위 또는 그보다 작게 연다
+- 제목은 커밋과 같은 형식
+- 본문에 `docs/ROADMAP.md`의 **완료 기준 중 충족한 항목**을 적는다
+- CI가 초록불이어야 병합한다
 
 ## 7. 금지
 
@@ -162,9 +200,14 @@ ADR-0003 참조
 | 문서 없이 스키마·API 변경 | §5 |
 | 요구사항에 없는 기능 추가 | 범위는 PRD가 정한다 |
 
-## 8. 작업 시작 전
+## 8. 작업·제안 전
 
-1. 어느 요구사항 ID에 대응하는가? 없으면 PRD에 먼저 추가
-2. `docs/ROADMAP.md`의 어느 스프린트인가?
-3. §1 경계와 §2.1 계층 규칙을 넘지 않는가?
-4. 설계 결정이 필요하면 ADR을 먼저 쓴다
+1. 어느 요구사항 ID 또는 Project Goal에 대응하는가? 없으면 PRD에 먼저 추가
+2. 지금 하지 않으면 무엇이 막히는가?
+3. **산출물이 어디에 기록되는가?** 기록할 곳이 없으면 시기상조다
+4. §1 경계와 §2.1 계층 규칙을 넘지 않는가?
+5. 설계 결정이 필요하면 ADR을 먼저 쓴다
+
+일반론("보통 이렇게 한다", "실무에서는")은 근거가 아니다. 이 프로젝트의 목표·제약과 연결하지 못하면 말하지 않는다.
+
+상세와 되묻기 규약은 `docs/FEEDBACK_LOOPS.md`.

@@ -1,0 +1,16 @@
+# 저장소의 모든 텍스트는 LF로 보관하고 LF로 체크아웃한다.
+#
+# WSL(리눅스)에서 개발하고 CI도 리눅스다. Windows 쪽 git의 core.autocrlf=true가
+# CRLF를 섞으면 셸 스크립트가 `bad interpreter: /bin/bash^M`로 죽는다.
+* text=auto eol=lf
+
+# 실행 스크립트 — 반드시 LF
+*.sh    text eol=lf
+*.py    text eol=lf
+Makefile text eol=lf
+
+# 바이너리
+*.png   binary
+*.jpg   binary
+*.pdf   binary
+*.xlsx  binary
