@@ -7,7 +7,8 @@
 
 전송: stdio
 구현: `backend/mcp_server/tools/`
-검증: `npx @modelcontextprotocol/inspector python backend/mcp_server/server.py`
+검증: `make mcp-inspect`
+실행: `cd backend && npx @modelcontextprotocol/inspector uv run python mcp_server/server.py`
 
 ---
 

@@ -31,13 +31,13 @@ MCP 서버가 죽어도 저장소 직접 조회로 우회하지 않는다. 장�
 ```
 AGENTS.md              규칙 원본 (CLAUDE.md가 @로 참조)
 Makefile               진입점
-pyproject.toml         ruff · pytest · import-linter 계약 (§2.1의 기계 검사판)
 .claude/               settings.json · hooks/on-edit.sh (편집 직후 검사)
 docker-compose.yml     qdrant(기본) · mssql·api·mcp·web(profile: full)
 data/raw/              원본 (Git 제외, 사용자 투입)
 docs/                  분리 문서 · decisions/
 
-backend/
+backend/               ★ 소스 루트. 최상위 패키지는 core·app·infra·api·mcp_server
+├─ pyproject.toml      ruff · pytest · import-linter 계약 (§2.1의 기계 검사판)
 ├─ core/               순수 계층. 외부 프레임워크 0
 │  ├─ models.py        Pydantic 도메인 스키마
 │  ├─ errors.py        도메인 예외
@@ -119,14 +119,14 @@ make test-all                          # 통합 포함
 
 make up                                # 개발: qdrant만
 make up-full                           # 클린 클론 검증·데모 (NFR-13)
-backend/db/migrate.sh                  # 미적용 마이그레이션만 실행
+make migrate                           # 미적용 마이그레이션만 실행
 
-npx @modelcontextprotocol/inspector python backend/mcp_server/server.py
-cd web && npx vue-tsc --noEmit && npm run build
+make mcp-inspect                       # MCP Inspector로 툴 검증
+make web-check                         # vue-tsc + 빌드
 ```
 
 **커밋 전 `make check`가 통과해야 한다.** §2.1 계층 규칙과 §3 컨벤션은
-`pyproject.toml`의 ruff·import-linter 계약으로 기계 검사되며, 파일 편집 직후
+`backend/pyproject.toml`의 ruff·import-linter 계약으로 기계 검사되며, 파일 편집 직후
 `.claude/hooks/on-edit.sh`가 같은 검사를 돌려 위반을 즉시 되돌린다.
 검사를 우회하지 않는다 — 규칙을 바꿔야 한다면 계약을 먼저 고친다.
 

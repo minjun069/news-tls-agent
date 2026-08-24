@@ -12,13 +12,16 @@ dev = [
     "import-linter>=2.3",
 ]
 
+# 이 디렉토리가 소스 루트다. core · app · infra · api · mcp_server 가 최상위 패키지가 된다.
+# backend 자체는 패키지가 아니므로 import는 `from core.ports import ...` 형태다 (AGENTS.md §2.1).
+
 # ─────────────────────────────────────────────────────────────
 # ruff — AGENTS.md §3 코드 컨벤션의 기계 검사판
 # ─────────────────────────────────────────────────────────────
 [tool.ruff]
 target-version = "py312"
 line-length = 100
-extend-exclude = ["web", "data", ".venv"]
+extend-exclude = [".venv"]
 
 [tool.ruff.lint]
 select = [
@@ -42,12 +45,12 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"backend/tests/**" = ["ANN", "S101"]  # 테스트는 힌트·assert 강제 안 함
-"backend/api/**" = ["B008"]           # FastAPI Depends() 기본값 관용
-"**/__init__.py" = ["F401", "I002"]   # 재수출 허용 · 빈 패키지 파일 예외
+"tests/**" = ["ANN", "S101"]        # 테스트는 힌트·assert 강제 안 함
+"api/**" = ["B008"]                 # FastAPI Depends() 기본값 관용
+"**/__init__.py" = ["F401", "I002"] # 재수출 허용 · 빈 패키지 파일 예외
 
 [tool.ruff.lint.isort]
-known-first-party = ["backend"]
+known-first-party = ["core", "app", "infra", "api", "mcp_server", "scripts", "tests"]
 required-imports = ["from __future__ import annotations"]
 
 [tool.ruff.lint.flake8-tidy-imports]
@@ -58,22 +61,22 @@ ban-relative-imports = "all"
 # 위반하면 `lint-imports`가 실패한다. 문서가 아니라 게이트다.
 # ─────────────────────────────────────────────────────────────
 [tool.importlinter]
-root_packages = ["backend"]
+root_packages = ["core", "app", "infra", "api", "mcp_server"]
 include_external_packages = true
 
 [[tool.importlinter.contracts]]
 name = "§2.1 계층 방향: api·mcp_server → app → core"
 type = "layers"
 layers = [
-    "backend.api : backend.mcp_server",
-    "backend.app",
-    "backend.core",
+    "api : mcp_server",
+    "app",
+    "core",
 ]
 
 [[tool.importlinter.contracts]]
 name = "§2.1 core는 외부 프레임워크를 모른다"
 type = "forbidden"
-source_modules = ["backend.core"]
+source_modules = ["core"]
 forbidden_modules = [
     "fastapi",
     "starlette",
@@ -86,29 +89,24 @@ forbidden_modules = [
 [[tool.importlinter.contracts]]
 name = "§2.1 app은 웹 프레임워크를 모른다"
 type = "forbidden"
-source_modules = ["backend.app"]
+source_modules = ["app"]
 forbidden_modules = ["fastapi", "starlette"]
 
 [[tool.importlinter.contracts]]
 name = "§2.1 infra import는 조립 지점에서만 (deps.py · server.py · scripts · integration)"
 type = "forbidden"
-source_modules = [
-    "backend.core",
-    "backend.app",
-    "backend.api.routes",
-    "backend.mcp_server.tools",
-]
-forbidden_modules = ["backend.infra"]
+source_modules = ["core", "app", "api.routes", "mcp_server.tools"]
+forbidden_modules = ["infra"]
 
 [[tool.importlinter.contracts]]
 name = "§2.1 infra는 app·api를 참조하지 않는다"
 type = "forbidden"
-source_modules = ["backend.infra"]
-forbidden_modules = ["backend.app", "backend.api", "backend.mcp_server"]
+source_modules = ["infra"]
+forbidden_modules = ["app", "api", "mcp_server"]
 
 # ─────────────────────────────────────────────────────────────
 [tool.pytest.ini_options]
 pythonpath = ["."]
-testpaths = ["backend/tests"]
+testpaths = ["tests"]
 addopts = "-q --strict-markers"
 markers = ["integration: 저장소·컨테이너가 필요한 테스트"]

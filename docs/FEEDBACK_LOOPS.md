@@ -103,13 +103,13 @@ L5·L7·L8은 일반 웹 프로젝트에 없다. 셋 다 **LLM이나 외부 계�
 
 | 루프 | 구현 | 실행 |
 |---|---|---|
-| L1 린트·포맷 | `pyproject.toml` `[tool.ruff]` | `make fmt` · `make lint` |
-| L2 계층 규칙 | `pyproject.toml` `[tool.importlinter]` | `make arch` |
+| L1 린트·포맷 | `backend/pyproject.toml` `[tool.ruff]` | `make fmt` · `make lint` |
+| L2 계층 규칙 | `backend/pyproject.toml` `[tool.importlinter]` | `make arch` |
 | L2 단위 테스트 | `backend/tests/unit/` | `make test` |
 | L3 CI | `.github/workflows/backend.yml` | PR |
 | L4 토큰 예산 | `.claude/hooks/check_doc_budget.py` | 편집 훅 · CI |
 | 편집 직후 | `.claude/hooks/on-edit.sh` | 자동 (L1·L2·L4를 함께 실행) |
 
-**규칙은 문서가 아니라 계약으로 존재한다.** `AGENTS.md §2.1`의 계층 규칙은 `pyproject.toml`의 import-linter 계약이 강제하고, `§3` 컨벤션은 ruff 규칙이 강제한다. 문장만 고치고 계약을 안 고치면 아무것도 바뀌지 않는다.
+**규칙은 문서가 아니라 계약으로 존재한다.** `AGENTS.md §2.1`의 계층 규칙은 `backend/pyproject.toml`의 import-linter 계약이 강제하고, `§3` 컨벤션은 ruff 규칙이 강제한다. 문장만 고치고 계약을 안 고치면 아무것도 바뀌지 않는다.
 
 새 루프를 추가하면 **이 문서의 §2 표와 실제 구현을 같은 커밋에서 갱신한다.**

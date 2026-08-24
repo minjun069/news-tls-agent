@@ -12,30 +12,33 @@ case "$(uname -s)" in
   MINGW* | MSYS* | CYGWIN*) exit 0 ;;
 esac
 
-cd "$(dirname "$0")/../.." || exit 0
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+BE="$ROOT/backend"
+
+cd "$ROOT" || exit 0
 command -v uv >/dev/null 2>&1 || exit 0
-[ -x .venv/bin/ruff ] || exit 0   # 아직 make install 전이면 통과
+[ -x "$BE/.venv/bin/ruff" ] || exit 0   # 아직 make install 전이면 통과
 
 problems=""
 add() { problems="${problems}$1"$'\n'; }
 
 # L1 — 포맷은 자동 수정한다
-uv run --quiet ruff format . >/dev/null 2>&1 || true
+(cd "$BE" && uv run --quiet ruff format . >/dev/null 2>&1) || true
 
 # L1 — 린트 (AGENTS.md §3)
-if ! out=$(uv run --quiet ruff check . 2>&1); then
+if ! out=$(cd "$BE" && uv run --quiet ruff check . 2>&1); then
   add "[ruff] AGENTS.md §3 위반"
   add "$out"
 fi
 
 # L2 — 계층 규칙 (AGENTS.md §1 · §2.1)
-if ! out=$(uv run --quiet lint-imports 2>&1); then
+if ! out=$(cd "$BE" && uv run --quiet lint-imports 2>&1); then
   add "[import-linter] AGENTS.md §2.1 계층 규칙 위반"
   add "$out"
 fi
 
 # L4 — 하네스 문서 토큰 예산 (AGENTS.md §5)
-if ! out=$(uv run --quiet python .claude/hooks/check_doc_budget.py 2>&1); then
+if ! out=$(python3 "$ROOT/.claude/hooks/check_doc_budget.py" 2>&1); then
   add "[budget] $out"
 fi
 

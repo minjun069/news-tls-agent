@@ -120,7 +120,7 @@ S1 기반 ─┬─ S2 데이터 계층 ─┬─ S4 MCP 서버 ─ S5 생성 �
 - **이 시점에 API 서버 없이 "MCP 서버를 만들었다"가 독립 증명된다**
 
 ```bash
-npx @modelcontextprotocol/inspector python backend/mcp_server/server.py
+make mcp-inspect
 ```
 
 ---

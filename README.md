@@ -59,9 +59,10 @@ WSL에서 개발하는 경우 `MSSQL_HOST`는 `localhost`가 아니다 — `.env
 원본 뉴스 데이터는 저장소에 포함되지 않는다. `data/raw/`에 직접 투입한다.
 
 ```bash
-uv run python backend/scripts/01_extract_seed.py
-uv run python backend/scripts/02_load_mssql.py
-uv run python backend/scripts/03_build_vectors.py
+cd backend
+uv run python scripts/01_extract_seed.py
+uv run python scripts/02_load_mssql.py
+uv run python scripts/03_build_vectors.py
 ```
 
 적재 순서와 제외 기준은 [`docs/DATA.md`](docs/DATA.md).

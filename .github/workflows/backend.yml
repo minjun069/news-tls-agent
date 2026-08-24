@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
 
+defaults:
+  run:
+    working-directory: backend
+
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -31,11 +35,11 @@ jobs:
 
       # AGENTS.md §5 — 하네스 문서 토큰 예산
       - name: 문서 토큰 예산
-        run: uv run python .claude/hooks/check_doc_budget.py --verbose
+        run: python3 ../.claude/hooks/check_doc_budget.py --verbose
 
       # pytest는 테스트가 없으면 exit 5. 스켈레톤 단계에서는 실패로 보지 않는다.
       - name: 단위 테스트
-        run: uv run pytest backend/tests/unit || [ $? -eq 5 ]
+        run: uv run pytest tests/unit || [ $? -eq 5 ]
 
   # 통합 테스트(MS-SQL·Qdrant 서비스 컨테이너)는 S9에서 추가한다.
   # docs/FEEDBACK_LOOPS.md L3 참조.
