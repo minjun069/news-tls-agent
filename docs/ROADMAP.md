@@ -39,8 +39,10 @@ S1 기반 ─┬─ S2 데이터 계층 ─┬─ S4 MCP 서버 ─ S5 생성 �
 
 ### S1-3 CI 골격
 - [ ] `.github/workflows/backend.yml` — ruff, pytest, **계층 규칙 검사** (`AGENTS.md` §2.1)
-- [ ] `.github/workflows/web.yml` — vue-tsc, build
-- [ ] `main` 브랜치 보호 (PR 필수)
+- [ ] `main` 브랜치 보호 (PR 필수, `check` 잡을 required status check으로 지정)
+
+> `web.yml`은 S7로 미룬다. `web/`이 비어 있는 동안 만들면 아무것도 검사하지 않는
+> 워크플로가 된다 — 게이트가 한 번도 울리지 않으면 게이트가 없는 것과 같다.
 
 > CI를 지금 붙이는 이유: 코드가 쌓인 뒤 도입하면 이미 깨진 상태에서 시작한다.
 
@@ -190,6 +192,7 @@ make mcp-inspect
 |---|---|
 
 - [ ] `npm create vite@latest web -- --template vue-ts`
+- [ ] `.github/workflows/web.yml` — vue-tsc, build (S1-3에서 이월)
 - [ ] API 클라이언트 (SSE 수신 포함)
 - [ ] 이슈 목록 화면 — 생성 진행(라운드 표시), 되묻기 UI
 - [ ] 이슈 상세 화면 — 타임라인, **대표 기사 즉시 표시**, 근거 기사 목록

@@ -36,13 +36,18 @@
 | L2 | 커밋 전 | 계층 규칙 (§1·§2.1), 단위 테스트 | 10초 | import-linter · pytest — `make check` | **S1** |
 | L3 | PR | 통합 테스트, 프론트 빌드 | 분 | CI | S1(골격) → S9(확장) |
 | L4 | 하네스 문서 편집 | 토큰 예산 초과 (§5) | 초 | 토큰 카운트 — 편집 훅 | **S1** |
-| L5 | 스키마 변경 | 마이그레이션 미적용, 문서 미갱신 | 초 | `migrate.sh` 재실행 + 동기화 검사 | S2 |
+| L5 | 계약 있는 코드 변경 | 코드는 바뀌었는데 계약 문서가 그대로 | 초 | `make doc-sync` — 동반 변경 검사 | **S1** |
 | L6 | 검색 방식 변경 | 결과가 나아졌는지 | 분 | 3종 비교 스크립트 | S3 |
 | L7 | MCP 툴 작성 | 툴이 실제로 호출되나 | 초 | Inspector + payload 단위 테스트 | S4 |
 | L8 | 파이프라인 변경 | 무한 루프, 호출 폭증, 허구 ID | 초 | **모의 LLM 단위 테스트** | S5 |
 | L9 | 화면 변경 | 표시 기준 위반 | — | 사람 확인 | S7 |
+| L10 | 계약 있는 코드 편집 **시도** | 계약을 안 보고 씀 | 초 | 문서 라우팅 — 안 읽었으면 편집 차단 | **S1** |
+| L11 | 스키마 변경 | 마이그레이션 미적용 | 초 | `migrate.sh` 재실행 | S2 |
 
 L6·L9만 사람 판단이 필요하다. 나머지는 전부 기계 판정이다.
+
+L5와 L10은 짝이다. L10이 **쓰기 전에** 계약을 읽히고, L5가 **쓴 뒤에** 계약이 갱신됐는지 본다.
+L5 없이 L10만 두면 낡은 문서를 강제로 읽히게 되어 오히려 해롭다 — 라우팅은 문서 품질의 증폭기다.
 
 ### 2.1 이 프로젝트 고유의 루프
 
@@ -108,7 +113,11 @@ L5·L7·L8은 일반 웹 프로젝트에 없다. 셋 다 **LLM이나 외부 계�
 | L2 단위 테스트 | `backend/tests/unit/` | `make test` |
 | L3 CI | `.github/workflows/backend.yml` | PR |
 | L4 토큰 예산 | `.claude/hooks/check_doc_budget.py` | 편집 훅 · CI |
+| L5 문서 동반 변경 | `.claude/doc-map.json` · `.claude/hooks/check_doc_sync.py` | `make doc-sync` (`check`에 포함) |
+| L10 문서 라우팅 | `.claude/settings.json` PreToolUse `if` · `hooks/require-doc.sh` · `hooks/mark-doc-read.sh` | 자동 (편집 시도 시) |
 | 편집 직후 | `.claude/hooks/on-edit.sh` | 자동 (L1·L2·L4를 함께 실행) |
+
+**어느 코드가 어느 문서에 묶이는지는 `.claude/doc-map.json` 하나가 원천이다.** `AGENTS.md §5`의 "정보 → 단일 원천" 표를 경로로 옮긴 것이다. 이 파일과 `settings.json`이 어긋나면 편집 차단이 조용히 발화하지 않으므로, `make doc-sync`가 둘의 일치를 먼저 검사한다.
 
 **규칙은 문서가 아니라 계약으로 존재한다.** `AGENTS.md §2.1`의 계층 규칙은 `backend/pyproject.toml`의 import-linter 계약이 강제하고, `§3` 컨벤션은 ruff 규칙이 강제한다. 문장만 고치고 계약을 안 고치면 아무것도 바뀌지 않는다.
 

@@ -32,6 +32,9 @@ downloads/
 logs/
 *.log
 
+# ─── 하네스 세션 상태 (문서 라우팅 마커) ───
+.claude/.state/
+
 # ─── 에디터 ───
 .obsidian/
 .vscode/
