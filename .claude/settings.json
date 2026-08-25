@@ -6,6 +6,7 @@
       "Bash(pytest:*)",
       "Bash(python3 scripts/:*)",
       "Bash(bash scripts/:*)",
+      "Bash(python3 .claude/hooks/:*)",
       "Bash(git status:*)",
       "Bash(git diff:*)",
       "Bash(git log:*)",
@@ -16,15 +17,42 @@
       "Bash(npx vue-tsc:*)"
     ]
   },
+
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|NotebookEdit",
+        "hooks": [
+          { "type": "command", "if": "Edit(/backend/db/migrations/**)", "command": "bash .claude/hooks/require-doc.sh docs/ERD.md" },
+          { "type": "command", "if": "Edit(/backend/db/schema.sql)", "command": "bash .claude/hooks/require-doc.sh docs/ERD.md" },
+          { "type": "command", "if": "Edit(/backend/infra/entities.py)", "command": "bash .claude/hooks/require-doc.sh docs/ERD.md" },
+          { "type": "command", "if": "Edit(/backend/api/routes/**)", "command": "bash .claude/hooks/require-doc.sh docs/API.md" },
+          { "type": "command", "if": "Edit(/backend/api/main.py)", "command": "bash .claude/hooks/require-doc.sh docs/API.md" },
+          { "type": "command", "if": "Edit(/backend/mcp_server/**)", "command": "bash .claude/hooks/require-doc.sh docs/MCP_TOOLS.md" },
+          { "type": "command", "if": "Edit(/backend/app/pipeline.py)", "command": "bash .claude/hooks/require-doc.sh docs/AI_SPEC.md" },
+          { "type": "command", "if": "Edit(/backend/app/agent.py)", "command": "bash .claude/hooks/require-doc.sh docs/AI_SPEC.md" },
+          { "type": "command", "if": "Edit(/backend/core/models.py)", "command": "bash .claude/hooks/require-doc.sh docs/DATA.md" },
+          { "type": "command", "if": "Edit(/web/src/**)", "command": "bash .claude/hooks/require-doc.sh docs/SCREENS.md" }
+        ]
+      }
+    ],
+
     "PostToolUse": [
       {
         "matcher": "Edit|Write",
         "hooks": [
-          {
-            "type": "command",
-            "command": "bash .claude/hooks/on-edit.sh"
-          }
+          { "type": "command", "command": "bash .claude/hooks/on-edit.sh" }
+        ]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [
+          { "type": "command", "if": "Read(/docs/ERD.md)", "command": "bash .claude/hooks/mark-doc-read.sh docs/ERD.md" },
+          { "type": "command", "if": "Read(/docs/API.md)", "command": "bash .claude/hooks/mark-doc-read.sh docs/API.md" },
+          { "type": "command", "if": "Read(/docs/MCP_TOOLS.md)", "command": "bash .claude/hooks/mark-doc-read.sh docs/MCP_TOOLS.md" },
+          { "type": "command", "if": "Read(/docs/AI_SPEC.md)", "command": "bash .claude/hooks/mark-doc-read.sh docs/AI_SPEC.md" },
+          { "type": "command", "if": "Read(/docs/DATA.md)", "command": "bash .claude/hooks/mark-doc-read.sh docs/DATA.md" },
+          { "type": "command", "if": "Read(/docs/SCREENS.md)", "command": "bash .claude/hooks/mark-doc-read.sh docs/SCREENS.md" }
         ]
       }
     ]

@@ -31,7 +31,7 @@ MCP 서버가 죽어도 저장소 직접 조회로 우회하지 않는다. 장�
 ```
 AGENTS.md              규칙 원본 (CLAUDE.md가 @로 참조)
 Makefile               진입점
-.claude/               settings.json · hooks/on-edit.sh (편집 직후 검사)
+.claude/               settings.json · doc-map.json · hooks/ (편집 직후 검사 · 문서 라우팅)
 docker-compose.yml     qdrant(기본) · mssql·api·mcp·web(profile: full)
 data/raw/              원본 (Git 제외, 사용자 투입)
 docs/                  분리 문서 · decisions/
@@ -39,6 +39,7 @@ docs/                  분리 문서 · decisions/
 backend/               ★ 소스 루트. 최상위 패키지는 core·app·infra·api·mcp_server
 ├─ pyproject.toml      ruff · pytest · import-linter 계약 (§2.1의 기계 검사판)
 ├─ core/               순수 계층. 외부 프레임워크 0
+│  ├─ config.py        설정 값의 형태 · 환경변수 해석
 │  ├─ models.py        Pydantic 도메인 스키마
 │  ├─ errors.py        도메인 예외
 │  ├─ ports.py         Repository · VectorStore · LLM · ToolClient Protocol
