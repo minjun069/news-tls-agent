@@ -3,7 +3,11 @@ name = "news-tls-agent"
 version = "0.1.0"
 description = "뉴스 타임라인 요약 에이전트"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "sqlalchemy>=2.0",
+    "pyodbc>=5.2",
+    "python-dotenv>=1.0",
+]
 
 [dependency-groups]
 dev = [
