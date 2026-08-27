@@ -113,7 +113,7 @@ DBMS: MS-SQL Server
 | `entity_type` | NVARCHAR(50) | NOT NULL | 인물 / 기관 / 장소 / 사건 등 |
 
 > 엔티티가 기사에 종속된다. 같은 인물이 두 기사에 나오면 두 행이 생긴다.
-> 표기 정규화를 하지 않기로 했으므로(PRD §3.3) 전역 엔티티 테이블을 두면 오히려 파편화가 드러난다.
+> `(article_id, entity_id)` UNIQUE는 관계 테이블의 복합 외래키가 참조하며, 기사 경계를 넘는 관계를 DB에서 차단한다.
 
 ### 2.6 `article_relations` — 기사에서 추출한 관계
 
@@ -125,7 +125,7 @@ DBMS: MS-SQL Server
 | `target_entity_id` | INT | FK → `article_entities`, NOT NULL | 대상 |
 | `relation_type` | NVARCHAR(100) | NOT NULL | 관계 서술 |
 
-`article_id` 외래키가 **NFR-16(그래프 요소 추적성)의 구현**이다. 출처 없는 관계는 삽입할 수 없다.
+`article_id` 외래키가 **NFR-16(그래프 요소 추적성)의 구현**이다. 출처 없는 관계는 삽입할 수 없다. `(article_id, source_entity_id)`와 `(article_id, target_entity_id)` 복합 외래키가 두 엔티티의 기사 귀속까지 강제한다.
 
 > `source_entity_id`와 `target_entity_id`는 같은 `article_id`에 속한 엔티티여야 한다. 기사 경계를 넘는 관계를 만들지 않는다.
 
@@ -140,7 +140,7 @@ DBMS: MS-SQL Server
 | `UQ_issues_topic` | `issues(topic)` | 이슈 재사용 판정 | ISS-003 |
 | `IX_issue_events_issue_order` | `issue_events(issue_id, event_order)` | 타임라인 정렬 조회 | ISS-005, AC-006 |
 | `IX_iea_article` | `issue_event_articles(article_id)` | **역방향 조회** (기사 → 이슈) | — |
-| `IX_entities_article` | `article_entities(article_id)` | 기사별 엔티티 조회 | GRPH-001 |
+| `UQ_entities_article_entity` | `article_entities(article_id, entity_id)` | 기사별 엔티티 조회·기사 귀속 FK | GRPH-001, NFR-16 |
 | `IX_relations_article` | `article_relations(article_id)` | 기사별 관계 조회 | GRPH-001 |
 
 ### 역방향 조회

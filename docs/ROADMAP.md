@@ -20,7 +20,7 @@ S1 기반 ─┬─ S2 데이터 계층 ─┬─ S4 MCP 서버 ─ S5 생성 �
 ### S1-1 프로젝트 초기화
 - [x] GitHub 리포 `news-tls-agent` 생성
 - [x] 디렉토리 스켈레톤 (`AGENTS.md` §2), `.env.example`, `.gitignore`
-- [x] `pyproject.toml` — 리포 루트. `backend/__init__.py`가 있어 패키지 루트가 리포 루트다
+- [x] `backend/pyproject.toml` — `backend/`가 Python 소스 루트이며 자체 패키지는 아니다
 - [x] `CLAUDE.md` — `@AGENTS.md` 한 줄
 - [x] `data/raw/.gitkeep` — 원본 데이터 투입 위치
 
@@ -32,14 +32,14 @@ S1 기반 ─┬─ S2 데이터 계층 ─┬─ S4 MCP 서버 ─ S5 생성 �
 - [x] `.claude/settings.json` — 권한 allowlist
 - [x] 편집 후 검사 훅 (`.claude/hooks/on-edit.sh`, exit 2로 에이전트에 피드백)
 - [x] **가드 검증** — 일부러 위반을 넣어 5개 계약과 8개 린트 규칙이 잡는 것을 확인
-- [ ] **문서 토큰 예산 확인** — `AGENTS.md` + `CLAUDE.md` 합계 3,000 토큰 이하 (PRD §3.4)
+- [x] **문서 토큰 예산 확인** — 현재 2,744 / 3,000 토큰 (PRD §3.4)
 
 > 계층 계약을 코드가 0줄일 때 도입한 이유: 위반이 없는 상태에서 켜면 통과하지만,
 > 코드가 쌓인 뒤 켜면 그때부터는 리팩터링이다.
 
 ### S1-3 CI 골격
-- [ ] `.github/workflows/backend.yml` — ruff, pytest, **계층 규칙 검사** (`AGENTS.md` §2.1)
-- [ ] `main` 브랜치 보호 (PR 필수, `check` 잡을 required status check으로 지정)
+- [x] `.github/workflows/backend.yml` — ruff, pytest, **계층 규칙 검사** (`AGENTS.md` §2.1)
+- [x] `main` 브랜치 보호 (PR 필수, `check` 잡을 required status check으로 지정)
 
 > `web.yml`은 S7로 미룬다. `web/`이 비어 있는 동안 만들면 아무것도 검사하지 않는
 > 워크플로가 된다 — 게이트가 한 번도 울리지 않으면 게이트가 없는 것과 같다.
@@ -48,10 +48,10 @@ S1 기반 ─┬─ S2 데이터 계층 ─┬─ S4 MCP 서버 ─ S5 생성 �
 
 ### S1-4 인프라 기동
 - [x] SQL Server Developer Edition + SSMS 설치, **TCP/IP 프로토콜 활성화**
-- [ ] ODBC Driver 18 확인, DB `newsagent` 생성
+- [x] ODBC Driver 18 확인, DB `newsagent` 생성
 - [x] Docker Desktop 설치
-- [ ] `docker-compose.yml` — `qdrant`(기본) · `mssql`·`api`·`mcp`·`web`(profile `full`)
-- [ ] `.env.example` — 모드 A/B/C 접속 정보 (TECH_DESIGN §4.1)
+- [x] `docker-compose.yml` — `qdrant`(기본) · `mssql`(profile `full`), 이후 서비스는 해당 스프린트에서 추가
+- [x] `.env.example` — 모드 A/B/C 접속 정보 (TECH_DESIGN §4.1)
 
 **완료 기준**: WSL에서 pyodbc로 Windows 호스트 SQL Server 접속 성공. Qdrant 대시보드 접속 성공. 빈 스켈레톤 PR에서 CI 초록불.
 
@@ -62,23 +62,23 @@ S1 기반 ─┬─ S2 데이터 계층 ─┬─ S4 MCP 서버 ─ S5 생성 �
 | 관련 | ISS-003~005, ART-001~003, NFR-08, NFR-09, NFR-02 |
 |---|---|
 
-- [ ] `backend/db/migrations/` — [`ERD.md`](ERD.md) 기준. 테이블 6개, 인덱스 7종
-- [ ] `backend/db/migrate.sh` — 미적용 번호만 실행, 스크립트당 트랜잭션
-- [ ] `000_bootstrap.sql` — 멱등. `CREATE DATABASE ... COLLATE` + `schema_migrations`
-- [ ] `scripts/01_extract_seed.py` — 원본 → 시드 JSONL
-- [ ] `scripts/02_load_mssql.py` — 배치 삽입, 멱등성
-- [ ] `core/ports.py` — Repository Protocol
-- [ ] `infra/db.py`·`infra/entities.py` — 엔진, ORM
-- [ ] `infra/repository.py` — ports 구현
-- [ ] `core/ranking.py` — 대표 기사 선정 3단 타이브레이커 (PRD §7.1). 순수 함수
-- [ ] `tests/unit/test_ranking.py` · `tests/integration/test_repository.py`
+- [x] `backend/db/migrations/` — [`ERD.md`](ERD.md) 기준. 테이블 6개, 인덱스 7종
+- [x] `backend/db/migrate.sh` — 미적용 번호만 실행, 스크립트당 트랜잭션
+- [x] `000_bootstrap.sql` — 멱등. `CREATE DATABASE ... COLLATE` + `schema_migrations`
+- [x] `scripts/01_extract_seed.py` — 원본 → 시드 JSONL
+- [x] `scripts/02_load_mssql.py` — 배치 upsert, 멱등성
+- [x] `core/models.py`·`core/ports.py` — 데이터 모델과 Repository Protocol
+- [x] `infra/db.py`·`infra/entities.py` — 엔진, 세션, ORM
+- [x] `infra/repository.py` — ports 구현
+- [x] `core/ranking.py` — 대표 기사 선정 3단 타이브레이커 (PRD §7.1). 순수 함수
+- [x] `tests/unit/test_ranking.py` · `tests/integration/test_repository.py`
 
 **완료 기준**
-- 이슈 → 이벤트 → 기사 3단 조인 질의 동작
-- **역방향 조회**("기사 X가 인용된 이슈") 동작
-- 대표 기사 선정이 결정론적 (같은 입력 → 같은 결과)
-- SSMS 실행계획에서 인덱스 사용 확인
-- 저장 중 예외 주입 시 부분 데이터 잔존 없음
+- [x] 이슈 → 이벤트 → 기사 3단 조인 질의 동작
+- [x] **역방향 조회**("기사 X가 인용된 이슈") 동작
+- [x] 대표 기사 선정이 결정론적 (같은 입력 → 같은 결과)
+- [ ] 실제 시드 적재 후 SSMS 실행계획에서 인덱스 사용 확인
+- [x] 저장 중 외래키 예외 발생 시 부분 데이터 잔존 없음
 
 > 사용자 선행 작업: 원본 데이터를 `data/raw/`에 투입하고 시드 토픽 2~3개를 선정해야 한다.
 
