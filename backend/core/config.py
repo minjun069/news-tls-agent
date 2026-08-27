@@ -57,21 +57,26 @@ def _optional(env: Mapping[str, str], key: str, default: str = "") -> str:
     return env.get(key, "").strip() or default
 
 
+def load_mssql_config(env: Mapping[str, str]) -> MssqlConfig:
+    """DB 도구가 LLM 설정 없이 MS-SQL 설정만 읽을 수 있게 한다."""
+    return MssqlConfig(
+        # 비워두면 infra가 해석한다. WSL 게이트웨이 IP는 재시작마다 바뀌므로
+        # .env에 적어두면 매번 고쳐야 한다.
+        host=_optional(env, "MSSQL_HOST"),
+        port=int(_optional(env, "MSSQL_PORT", "1433")),
+        database=_optional(env, "MSSQL_DB", "newsagent"),
+        user=_required(env, "MSSQL_USER"),
+        password=_required(env, "MSSQL_PASSWORD"),
+        driver=_optional(env, "MSSQL_DRIVER", "ODBC Driver 18 for SQL Server"),
+        trust_cert=_optional(env, "MSSQL_TRUST_CERT", "yes").lower() in {"yes", "true", "1"},
+        collation=_optional(env, "MSSQL_COLLATION", "Korean_Wansung_CI_AS"),
+    )
+
+
 def load_settings(env: Mapping[str, str]) -> Settings:
-    """환경 매핑에서 설정을 읽는다. 호출부가 os.environ을 넘긴다."""
+    """환경 매핑에서 전체 애플리케이션 설정을 읽는다."""
     return Settings(
-        mssql=MssqlConfig(
-            # 비워두면 infra가 해석한다. WSL 게이트웨이 IP는 재시작마다 바뀌므로
-            # .env에 적어두면 매번 고쳐야 한다.
-            host=_optional(env, "MSSQL_HOST"),
-            port=int(_optional(env, "MSSQL_PORT", "1433")),
-            database=_optional(env, "MSSQL_DB", "newsagent"),
-            user=_required(env, "MSSQL_USER"),
-            password=_required(env, "MSSQL_PASSWORD"),
-            driver=_optional(env, "MSSQL_DRIVER", "ODBC Driver 18 for SQL Server"),
-            trust_cert=_optional(env, "MSSQL_TRUST_CERT", "yes").lower() in {"yes", "true", "1"},
-            collation=_optional(env, "MSSQL_COLLATION", "Korean_Wansung_CI_AS"),
-        ),
+        mssql=load_mssql_config(env),
         qdrant=QdrantConfig(
             url=_optional(env, "QDRANT_URL", "http://localhost:6333"),
             collection=_optional(env, "QDRANT_COLLECTION", "articles"),

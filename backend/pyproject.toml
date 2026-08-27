@@ -7,6 +7,7 @@ dependencies = [
     "sqlalchemy>=2.0",
     "pyodbc>=5.2",
     "python-dotenv>=1.0",
+    "pydantic>=2.0",
 ]
 
 [dependency-groups]
@@ -52,6 +53,7 @@ ignore = [
 "tests/**" = ["ANN", "S101"]        # 테스트는 힌트·assert 강제 안 함
 "api/**" = ["B008"]                 # FastAPI Depends() 기본값 관용
 "**/__init__.py" = ["F401", "I002"] # 재수출 허용 · 빈 패키지 파일 예외
+"scripts/[0-9][0-9]_*.py" = ["N999"] # 실행 순서를 나타내는 파일명
 
 [tool.ruff.lint.isort]
 known-first-party = ["core", "app", "infra", "api", "mcp_server", "scripts", "tests"]

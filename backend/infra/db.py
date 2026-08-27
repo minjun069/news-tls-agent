@@ -11,6 +11,7 @@ from pathlib import Path
 from urllib.parse import quote_plus
 
 from sqlalchemy import Engine, create_engine
+from sqlalchemy.orm import Session, sessionmaker
 
 from core.config import ConfigError, MssqlConfig
 
@@ -83,3 +84,8 @@ def build_url(config: MssqlConfig, database: str | None = None) -> str:
 def create_db_engine(config: MssqlConfig, database: str | None = None) -> Engine:
     """엔진을 만든다. 모듈 레벨 전역으로 두지 않는다 (AGENTS.md §3)."""
     return create_engine(build_url(config, database), pool_pre_ping=True, future=True)
+
+
+def create_session_factory(engine: Engine) -> sessionmaker[Session]:
+    """요청·작업 단위로 세션을 만들 팩토리. 세션 자체는 전역으로 공유하지 않는다."""
+    return sessionmaker(bind=engine, expire_on_commit=False)
