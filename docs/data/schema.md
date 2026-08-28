@@ -1,6 +1,6 @@
 # ERD — news-tls-agent
 
-관련 PRD: [`REQUIREMENTS.md`](REQUIREMENTS.md) · 기술 설계서: [`TECH_DESIGN.md`](TECH_DESIGN.md)
+관련 PRD: [`REQUIREMENTS.md`](../REQUIREMENTS.md) · 기술 설계서: [`TECH_DESIGN.md`](../architecture/overview.md)
 
 DBMS: MS-SQL Server
 
@@ -62,7 +62,7 @@ DBMS: MS-SQL Server
 
 > `article_id`를 IDENTITY로 두지 않는 이유: 원본 ID를 보존해야 벡터 DB payload 및 재적재 시 정합성이 유지된다.
 >
-> `entities_extracted_at`이 지식 그래프의 **추출 여부 판정 기준**이다. 이 값이 NULL인 대표 기사가 하나라도 있으면 추출을 수행한다 (PRD §6.5).
+> `entities_extracted_at`이 지식 그래프의 **추출 여부 판정 기준**이다. 이 값이 NULL인 대표 기사가 하나라도 있으면 추출을 수행한다 ([지식 그래프 요구사항](../requirements/knowledge-graph.md)).
 
 ### 2.2 `issues` — 이슈
 
@@ -76,7 +76,7 @@ DBMS: MS-SQL Server
 
 > `topic`의 UNIQUE가 ISS-003(기존 이슈 재사용)의 구현 근거다. 애플리케이션 조회에 앞서 DB가 중복을 막는다.
 >
-> 심층 분석과 핵심 용어는 생성하지 않는다 (PRD §3.3).
+> 심층 분석과 핵심 용어는 생성하지 않는다 ([PRD 비목표](../REQUIREMENTS.md#35-비목표)).
 
 ### 2.3 `issue_events` — 타임라인 이벤트
 
@@ -97,11 +97,11 @@ DBMS: MS-SQL Server
 |---|---|---|---|
 | `event_id` | INT | PK, FK → `issue_events` | ON DELETE CASCADE |
 | `article_id` | BIGINT | PK, FK → `articles` | |
-| `relevance_score` | FLOAT | NULL | 검색 관련도. 대표 기사 선정에 사용 (PRD §7.1) |
+| `relevance_score` | FLOAT | NULL | 검색 관련도. 대표 기사 선정에 사용 ([대표 기사 선정 정책](../requirements/issue-view.md#대표-기사-선정-정책)) |
 
 복합 기본키 `(event_id, article_id)`가 같은 기사의 중복 인용을 DB 수준에서 막는다.
 
-`article_id`의 외래키가 **할루시네이션 방어의 최종 계층**이다 (NFR-09, [AI_SPEC §5.3](AI_SPEC.md)).
+`article_id`의 외래키가 **할루시네이션 방어의 최종 계층**이다 (NFR-09, [AI_SPEC §5.3](../ai/specification.md)).
 
 ### 2.5 `article_entities` — 기사에서 추출한 엔티티
 
@@ -163,7 +163,7 @@ ORDER BY e.event_date;
 
 ### 4.1 이슈 상세 + 대표 기사
 
-대표 기사 선정 기준은 PRD §7.1을 따른다.
+대표 기사 선정 기준은 [대표 기사 선정 정책](../requirements/issue-view.md#대표-기사-선정-정책)을 따른다.
 
 ```sql
 WITH ranked AS (

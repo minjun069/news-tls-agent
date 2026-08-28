@@ -1,6 +1,6 @@
 # MS-SQL 마이그레이션
 
-스키마 계약은 [`../../docs/ERD.md`](../../docs/ERD.md), 실행 순서는 `migrations/`가 원본이다.
+스키마 계약은 [`../../docs/data/schema.md`](../../docs/data/schema.md), 실행 순서는 `migrations/`가 원본이다.
 `schema.sql`은 현재 전체 구조를 한 번에 읽기 위한 참고본이며 실행하지 않는다.
 
 ## 규칙

@@ -1,6 +1,6 @@
 # 데이터 파이프라인 문서 — news-tls-agent
 
-관련 PRD: [`REQUIREMENTS.md`](REQUIREMENTS.md) · ERD: [`ERD.md`](ERD.md)
+관련 PRD: [`REQUIREMENTS.md`](../REQUIREMENTS.md) · ERD: [`ERD.md`](schema.md)
 
 > **이 문서가 상태값의 단일 원천이다.** PRD와 API 명세는 여기 정의된 상태값을 참조한다.
 
@@ -81,7 +81,7 @@
 
 ### 2.3 수집 루프 종료 상태
 
-PRD §7.2 정책에 대응한다. API 응답의 `termination` 값으로 노출된다.
+[타임라인 종료 정책](../requirements/timeline.md#수집-루프-종료-정책) 정책에 대응한다. API 응답의 `termination` 값으로 노출된다.
 
 | 상태 | 판정 조건 |
 |---|---|
@@ -93,7 +93,7 @@ PRD §7.2 정책에 대응한다. API 응답의 `termination` 값으로 노출�
 
 ### 2.4 이슈 생성 결과 상태
 
-API 오류 응답의 `reason` 값으로 노출된다. 화면 표기는 [`SCREENS.md`](SCREENS.md) §4.1을 따른다.
+API 오류 응답의 `reason` 값으로 노출된다. 화면 표기는 [`SCREENS.md`](../product/screens.md) §4.1을 따른다.
 
 | 상태 | 판정 조건 | 재시도 |
 |---|---|---|
@@ -122,7 +122,7 @@ API 오류 응답의 `reason` 값으로 노출된다. 화면 표기는 [`SCREENS
 | `미추출` | `entities_extracted_at` IS NULL | 그래프 조회 시 추출 수행 |
 | `추출 완료` | `entities_extracted_at` NOT NULL | 저장된 엔티티·관계를 그대로 사용 |
 
-> 추출은 **기사 1건 단위 트랜잭션**이다. 엔티티만 저장되고 관계가 실패하면 `entities_extracted_at`이 갱신되지 않아 다음 조회에서 재추출되고 중복이 쌓인다 ([`ERD.md`](ERD.md) §5).
+> 추출은 **기사 1건 단위 트랜잭션**이다. 엔티티만 저장되고 관계가 실패하면 `entities_extracted_at`이 갱신되지 않아 다음 조회에서 재추출되고 중복이 쌓인다 ([`ERD.md`](schema.md) §5).
 
 ---
 
@@ -149,14 +149,29 @@ data/seed/*.jsonl                    ← 선정 토픽 기사만 추출
 - 정규화 필드: `article_id`, `title`, `sub_title`, `service_date`, `summary`, `content`,
   `url`, `category_large`, `category_middle`, `category_small`
 - 같은 `article_id`가 여러 번 나오면 마지막 유효 행을 사용하며, 출력은 ID 오름차순이다.
-- 원본 파일의 필드명이 위 계약과 다르면 원본을 넣기 전에 매핑을 확정하고 추출 스크립트를
-  수정한다. 아직 제공되지 않은 원본 스키마를 추측해 별칭을 만들지 않는다.
+
+현재 실제 원본은 `data/raw/news.jsonl`이며 178,887행이다. 확인된 주요 매핑은 다음과 같다.
+
+| 원본 필드 | 정규화 필드 |
+|---|---|
+| `article_title` | `title` |
+| `article_sub_title` | `sub_title` |
+| `article_service_daytime` | `service_date` |
+| `article_summary` | `summary` |
+| `text` | `content` |
+| `article_url` | `url` |
+| `category_large_nm` | `category_large` |
+| `category_middle_nm` | `category_middle` |
+| `category_small_nm` | `category_small` |
+
+현재 추출기는 이 원본 필드명을 아직 받지 못하므로 실제 전처리는 미완료다. 토픽 선정 방식과
+필터 기준을 확정한 뒤 매핑, 표본 검증, 전체 행 검증을 함께 수행한다.
 
 ### 3.2 MS-SQL 적재
 
 - `--batch-size` 단위 upsert
 - **멱등성**: 동일 `article_id` 재적재 시 덮어쓴다
-- 스키마는 [`ERD.md`](ERD.md) 참조
+- 스키마는 [`schema.md`](schema.md) 참조
 
 ### 3.3 벡터 적재
 

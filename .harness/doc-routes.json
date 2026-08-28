@@ -1,0 +1,61 @@
+{
+  "routes": [
+    {
+      "name": "MS-SQL schema and repository",
+      "paths": [
+        "backend/db/migrations/**",
+        "backend/db/schema.sql",
+        "backend/db/migrate.py",
+        "backend/infra/entities.py",
+        "backend/infra/repository.py"
+      ],
+      "docs": ["docs/data/schema.md"]
+    },
+    {
+      "name": "source data and ingestion",
+      "paths": [
+        "backend/core/models.py",
+        "backend/scripts/01_extract_seed.py",
+        "backend/scripts/02_load_mssql.py"
+      ],
+      "docs": ["docs/data/source-and-ingestion.md"]
+    },
+    {
+      "name": "HTTP and SSE contract",
+      "paths": ["backend/api/main.py", "backend/api/routes/**"],
+      "docs": ["docs/contracts/http-api.md"]
+    },
+    {
+      "name": "MCP tool contract",
+      "paths": ["backend/mcp_server/**"],
+      "docs": ["docs/contracts/mcp-tools.md"]
+    },
+    {
+      "name": "AI pipeline and retrieval",
+      "paths": [
+        "backend/app/pipeline.py",
+        "backend/app/agent.py",
+        "backend/app/search.py",
+        "backend/infra/qdrant.py",
+        "backend/infra/embedding.py",
+        "backend/scripts/03_build_vectors.py"
+      ],
+      "docs": ["docs/ai/specification.md"]
+    },
+    {
+      "name": "frontend behavior",
+      "paths": ["web/src/**"],
+      "docs": ["docs/product/screens.md"]
+    },
+    {
+      "name": "agent harness",
+      "paths": [".harness/**", ".codex/hooks.json"],
+      "docs": ["docs/engineering/agent-workflow.md"]
+    },
+    {
+      "name": "validation and CI",
+      "paths": ["Makefile", ".github/workflows/**", "backend/pyproject.toml"],
+      "docs": ["docs/engineering/validation.md"]
+    }
+  ]
+}

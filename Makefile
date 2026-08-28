@@ -1,23 +1,22 @@
-# news-tls-agent — 진입점
-# 각 검사가 무엇을 잡는지는 docs/FEEDBACK_LOOPS.md
-# 규칙 원본은 AGENTS.md. 여기는 그 규칙을 실행하는 곳이다.
-#
-# backend/ 가 소스 루트이자 uv 프로젝트다. 파이썬 관련 명령은 그 안에서 돈다.
+# news-tls-agent — 실행과 검증의 단일 진입점
+# 상세: docs/engineering/validation.md
 
 BE := backend
 
-.PHONY: help install check fmt lint arch test test-all doc-sync up up-full down migrate mcp-inspect web-check
+.PHONY: help install check fmt lint arch test test-all doc-sync docs-for agent-budget up up-full down migrate mcp-inspect web-check
 
 help:
-	@echo "install    .venv 생성 (uv)"
-	@echo "check      커밋 전 게이트 — 린트 · 계층 · 단위테스트 · 문서 동기화"
-	@echo "fmt        포맷 + 자동 수정"
-	@echo "arch       계층 규칙만 (AGENTS.md §1 · §2.1)"
-	@echo "doc-sync   코드와 계약 문서의 동반 변경 (AGENTS.md §5 · §7)"
-	@echo "test-all   통합 포함 (MS-SQL · Qdrant 필요)"
-	@echo "up         개발: qdrant만"
-	@echo "up-full    클린 클론 검증 · 데모 (NFR-13)"
-	@echo "migrate    미적용 마이그레이션만 실행"
+	@echo "install       backend .venv 생성 (uv)"
+	@echo "check         커밋 전 게이트 — lint · arch · unit · docs"
+	@echo "fmt           Python 포맷 + 자동 수정"
+	@echo "arch          계층 의존 계약"
+	@echo "doc-sync      계약 문서 동반 변경 + Markdown 링크"
+	@echo "docs-for      PATHS='경로 ...'에 필요한 계약 문서 출력"
+	@echo "agent-budget  AGENTS.md 현재 크기 보고(강제 기준 없음)"
+	@echo "test-all      MS-SQL · Qdrant 포함 통합 테스트"
+	@echo "up            개발 인프라: qdrant"
+	@echo "up-full       클린 클론 · 데모 전체 컨테이너"
+	@echo "migrate       미적용 MS-SQL 마이그레이션 실행"
 
 install:
 	cd $(BE) && uv sync
@@ -35,19 +34,22 @@ lint:
 arch:
 	cd $(BE) && uv run lint-imports
 
-# pytest는 테스트가 없으면 exit 5를 반환한다. 스켈레톤 단계에서는 실패로 보지 않는다.
 test:
 	@cd $(BE) && uv run pytest tests/unit || [ $$? -eq 5 ]
 
 test-all:
 	cd $(BE) && uv run pytest tests
 
-# 계약을 가진 코드가 바뀌었는데 그 계약 문서가 안 바뀌면 실패한다.
-# --validate-settings 는 doc-map.json과 settings.json이 어긋나 편집 차단이
-# 조용히 안 뜨는 상태를 잡는다 — 가드의 가드다.
 doc-sync:
-	@python3 .claude/hooks/check_doc_sync.py --validate-settings > /dev/null
-	@python3 .claude/hooks/check_doc_sync.py
+	@python3 .harness/check_doc_sync.py --validate-map > /dev/null
+	@python3 .harness/check_doc_sync.py
+	@python3 .harness/check_markdown_links.py
+
+docs-for:
+	@python3 .harness/route_docs.py $(PATHS)
+
+agent-budget:
+	@python3 .harness/report_agent_budget.py
 
 up:
 	docker compose up -d
