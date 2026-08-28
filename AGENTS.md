@@ -1,216 +1,156 @@
 # AGENTS.md — news-tls-agent
 
-작업 전에 이 문서를 읽는다. 상세는 `docs/`를 참조한다.
+Codex는 작업을 시작하기 전에 이 문서를 읽고, §4의 작업별 문서 흐름을 따라 필요한 문서만 추가로 읽는다.
 
-## 0. 이 프로젝트
+## 0. 프로젝트 개요
 
-뉴스 아카이브를 근거로 사건 타임라인을 만들고, 각 분기점에 근거 기사를 귀속시켜 신뢰 가능한 형태로 제공한다.
+뉴스 아카이브를 근거로 사건 타임라인을 만들고, 각 분기점에 근거 기사를 귀속해 신뢰 가능한 형태로 제공한다.
+학습 목표는 **MCP · MS-SQL · Qdrant · AI 에이전트 개발 경험**이다. 범위를 줄이더라도 이 기술을 우회하는 대체 구현은 제안하거나 추가하지 않는다.
 
-학습 목표는 **MCP · MS-SQL · 벡터 DB 실무 경험**이며, **§1의 경계가 그 목표 자체**다. 편의를 위해 넘으면 프로젝트의 이유가 사라진다.
+## 1. 최상위 규칙
 
-무엇을 만드는가 → `docs/REQUIREMENTS.md` · 어떻게 만드는가 → `docs/TECH_DESIGN.md`
-작업 방식과 검증 루프 → `docs/FEEDBACK_LOOPS.md`
-
-## 1. 아키텍처 경계 — 위반 금지
-
-이 프로젝트의 존재 이유가 이 경계다. 편의를 위해 넘지 않는다.
-
-- **에이전트는 저장소에 직접 접근하지 않는다.** 모든 데이터 접근은 MCP 서버 경유
-- **MCP 서버는 LLM을 호출하지 않는다.** 검색·조회만 한다
-- **프론트엔드는 DB·LLM을 알지 못한다.** API 서버만 호출한다
-
-MCP 서버가 죽어도 저장소 직접 조회로 우회하지 않는다. 장애 시 우회를 한 번 허용하면 그 경로가 영구화된다.
+1. **계획·검토·설명을 요청받은 단계에서는 구현하지 않는다.** 사용자가 구현을 명시한 범위만 변경한다.
+2. **실제 상태를 직접 확인한다.** 파일·원본 데이터·DB·컨테이너·서비스의 존재나 상태를 `git status`로 추론하지 않는다. 대상 자체를 확인하지 않았으면 “없음”이 아니라 “미확인”으로 보고한다.
+3. **에이전트는 저장소에 직접 접근하지 않는다.** 런타임 데이터 접근은 MCP 서버를 경유한다. MCP 장애 시 직접 조회로 우회하지 않는다.
+4. **MCP 서버는 LLM을 호출하지 않는다.** 검색·조회·저장 계약과 감사 지점만 담당한다.
+5. **프론트엔드는 DB·LLM을 알지 못한다.** API 서버만 호출한다.
+6. 요구사항에 없는 기능, 임시 대체 DB, 학습 목표를 미루는 관통 슬라이스를 추가하지 않는다.
+7. 구조·계약·규칙을 바꾸면 같은 변경에서 해당 문서와 기계 검사를 함께 갱신한다.
 
 근거: [ADR-0001](docs/decisions/0001-mcp-data-access.md)
 
-## 2. 디렉토리
+## 2. 프로젝트 디렉터리
 
-아래는 **목표 구조**다. 아직 없는 파일은 `docs/ROADMAP.md`의 스프린트에서 생긴다.
-표에 없는 디렉토리를 새로 만들지 않는다 — 필요하면 이 표를 먼저 고친다.
+아래는 목표 구조다. 아직 없는 파일은 [로드맵](docs/engineering/roadmap.md)의 해당 스프린트에서 만든다. 새 최상위 디렉터리나 새 계층이 필요하면 이 트리와 아키텍처 문서를 먼저 갱신한다.
 
+```text
+news-tls-agent/
+├─ AGENTS.md                 Codex가 항상 읽는 상위 규칙·프로젝트 지도
+├─ README.md                 클린 클론·로컬 기동 절차
+├─ Makefile                  개발·검증 명령의 단일 진입점
+├─ docker-compose.yml        qdrant(기본) · 전체 실행(profile: full)
+├─ .env.example
+├─ .codex/
+│  └─ hooks.json             Codex 생명주기와 범용 하네스 연결
+├─ .harness/                 도구에 종속되지 않는 검증·문서 라우팅
+│  ├─ doc-routes.json
+│  ├─ route_docs.py
+│  ├─ check_doc_sync.py
+│  ├─ check_markdown_links.py
+│  ├─ report_agent_budget.py
+│  └─ on-edit.sh
+├─ .github/workflows/
+│  ├─ backend.yml
+│  └─ web.yml                S7에서 추가
+├─ data/
+│  ├─ raw/                   원본 JSONL, Git 제외, 사용자 투입
+│  └─ seed/                  전처리 산출물, Git 제외
+├─ docs/
+│  ├─ INDEX.md               전체 문서 목차와 단일 원천
+│  ├─ REQUIREMENTS.md        문제·목표·범위·사용자·기능 목차
+│  ├─ requirements/          기능별 요구사항·AC·정책·예외
+│  │  ├─ timeline.md
+│  │  ├─ issue-view.md
+│  │  ├─ chat.md
+│  │  ├─ export.md
+│  │  └─ knowledge-graph.md
+│  ├─ architecture/
+│  │  └─ overview.md         실행 토폴로지·기술 스택·NFR
+│  ├─ data/
+│  │  ├─ source-and-ingestion.md
+│  │  └─ schema.md           ERD·대표 질의·트랜잭션 경계
+│  ├─ contracts/
+│  │  ├─ http-api.md         프론트엔드가 사용하는 HTTP/SSE 계약
+│  │  └─ mcp-tools.md        에이전트가 사용하는 MCP 툴 계약
+│  ├─ ai/
+│  │  └─ specification.md    프롬프트·생성·검색·근거 전략
+│  ├─ product/
+│  │  └─ screens.md          화면 흐름·표기 정책
+│  ├─ engineering/
+│  │  ├─ roadmap.md
+│  │  ├─ agent-workflow.md
+│  │  ├─ code-conventions.md
+│  │  ├─ git-workflow.md
+│  │  └─ validation.md
+│  └─ decisions/             채택된 ADR; 본문 수정 금지
+├─ backend/                  Python 소스 루트
+│  ├─ pyproject.toml         의존성·ruff·pytest·import-linter 계약
+│  ├─ core/                  도메인 타입·포트·순수 계산
+│  │  ├─ config.py
+│  │  ├─ models.py           Pydantic 도메인 모델
+│  │  ├─ errors.py
+│  │  ├─ ports.py            Repository·VectorStore·LLM·ToolClient
+│  │  └─ ranking.py
+│  ├─ app/                   유스케이스·오케스트레이션
+│  │  ├─ pipeline.py
+│  │  ├─ agent.py            LangGraph 그래프
+│  │  └─ search.py
+│  ├─ infra/                 SQLAlchemy·Qdrant·Gemini·MCP 클라이언트
+│  │  ├─ db.py
+│  │  ├─ entities.py
+│  │  ├─ repository.py
+│  │  ├─ qdrant.py
+│  │  ├─ embedding.py
+│  │  └─ mcp_client.py
+│  ├─ api/                   FastAPI HTTP 어댑터·조립
+│  │  ├─ main.py
+│  │  ├─ deps.py             core ← infra 주입 지점
+│  │  └─ routes/
+│  ├─ mcp_server/            MCP 어댑터·조립
+│  │  ├─ server.py
+│  │  └─ tools/
+│  ├─ db/                    migrate.py·migrate.sh·schema.sql·migrations/
+│  ├─ scripts/               01_extract_seed·02_load_mssql·03_build_vectors
+│  └─ tests/
+│     ├─ unit/               컨테이너 불필요
+│     └─ integration/        MS-SQL·Qdrant 필요
+└─ web/                      Vue 3 + Vite + TypeScript
 ```
-AGENTS.md              규칙 원본 (CLAUDE.md가 @로 참조)
-Makefile               진입점
-.claude/               settings.json · doc-map.json · hooks/ (편집 직후 검사 · 문서 라우팅)
-docker-compose.yml     qdrant(기본) · mssql·api·mcp·web(profile: full)
-data/raw/              원본 (Git 제외, 사용자 투입)
-docs/                  분리 문서 · decisions/
 
-backend/               ★ 소스 루트. 최상위 패키지는 core·app·infra·api·mcp_server
-├─ pyproject.toml      ruff · pytest · import-linter 계약 (§2.1의 기계 검사판)
-├─ core/               순수 계층. 외부 프레임워크 0
-│  ├─ config.py        설정 값의 형태 · 환경변수 해석
-│  ├─ models.py        Pydantic 도메인 스키마
-│  ├─ errors.py        도메인 예외
-│  ├─ ports.py         Repository · VectorStore · LLM · ToolClient Protocol
-│  └─ ranking.py       점수 결합·정렬 (RRF, 대표 기사 선정) — 순수 계산
-│
-├─ app/                오케스트레이션. 프레임워크를 알아도 됨
-│  ├─ pipeline.py      타임라인 생성 흐름
-│  ├─ agent.py         LangGraph 그래프
-│  └─ search.py        검색 유스케이스
-│
-├─ infra/              외부 연동
-│  ├─ db.py            엔진·세션
-│  ├─ entities.py      SQLAlchemy ORM
-│  ├─ repository.py    ports 구현
-│  ├─ qdrant.py
-│  ├─ embedding.py     Gemini
-│  └─ mcp_client.py
-│
-├─ api/                HTTP 어댑터 + 조립
-│  ├─ main.py
-│  ├─ deps.py          ★ core ← infra 주입 지점
-│  └─ routes/
-│
-├─ mcp_server/         MCP 어댑터 + 조립
-│  ├─ server.py
-│  └─ tools/
-│
-├─ db/                 migrate.sh · schema.sql · migrations/
-├─ scripts/            01_extract_seed · 02_load_mssql · 03_build_vectors
-└─ tests/              unit/ (컨테이너 불필요) · integration/
+## 3. 아키텍처 경계
 
-web/                   Vue 3 + Vite
-```
+의존 방향은 `api·mcp_server → app → core`, `infra → core`다. `app`은 `infra`를 import하지 않고 `core.ports` 타입으로 의존성을 받는다.
 
-### 2.1 계층 규칙
+- `core`: DB·웹·에이전트 프레임워크와 I/O를 모른다. **Pydantic은 도메인 검증·불변 모델 용도로 허용한다.**
+- `app`: LangGraph 사용 가능. FastAPI·Starlette와 `infra` 직접 import 금지.
+- `infra`: `app`·`api`·`mcp_server` 참조 금지.
+- `infra` import 허용 조립점: `api/deps.py`, `mcp_server/server.py`, `scripts/`, `tests/integration/`.
+- SQL은 `infra/repository.py`와 `backend/db/`의 마이그레이션·관리 스크립트에서만 작성한다.
 
-의존은 `api·mcp_server → app → core`, `infra → core` 한 방향이다.
-`app`은 `infra`를 import하지 않고 `core.ports` 타입으로 받는다.
+상세: [아키텍처](docs/architecture/overview.md), [코드 컨벤션](docs/engineering/code-conventions.md). 기계 검사는 `backend/pyproject.toml`의 import-linter·ruff 계약이다.
 
-| 계층 | 금지 |
+## 4. 작업 종류별 문서 흐름
+
+표의 문서를 **왼쪽부터 순서대로** 읽는다. 구현 파일이 정해지면 `python3 .harness/route_docs.py <경로...>`로 계약 문서를 추가 확인한다. 모든 문서를 매번 읽지 않는다.
+
+| 작업 종류 | 읽는 순서 |
 |---|---|
-| `core` | 모든 외부 프레임워크 (fastapi · langgraph · sqlalchemy · qdrant_client · google.genai) |
-| `app` | 웹 프레임워크 (fastapi · starlette), `infra` 직접 import |
-| `infra` | `app`·`api` 참조 |
+| 작업 단위 시작·종료 | `docs/engineering/roadmap.md` → 해당 기능 요구사항 → `docs/engineering/validation.md` |
+| 요구사항·범위 변경 | `docs/REQUIREMENTS.md` → `docs/requirements/<기능>.md` → 영향받는 계약·화면 문서 |
+| 원본 데이터·전처리·적재 | `docs/requirements/timeline.md` → `docs/data/source-and-ingestion.md` → `docs/data/schema.md` |
+| MS-SQL·Repository·마이그레이션 | `docs/data/schema.md` → `docs/data/source-and-ingestion.md` → `docs/architecture/overview.md` |
+| 벡터 적재·검색 | 해당 기능 요구사항 → `docs/ai/specification.md` §4 → `docs/decisions/0003-search-strategies.md` |
+| 타임라인 생성 AI | `docs/requirements/timeline.md` → `docs/ai/specification.md` §2·§5 → `docs/architecture/overview.md` |
+| 대화 에이전트 | `docs/requirements/chat.md` → `docs/ai/specification.md` §3·§5 → `docs/contracts/mcp-tools.md` |
+| MCP 서버·툴 | 해당 기능 요구사항 → `docs/contracts/mcp-tools.md` → `docs/decisions/0001-mcp-data-access.md` |
+| HTTP API·SSE | 해당 기능 요구사항 → `docs/contracts/http-api.md` → `docs/data/source-and-ingestion.md`의 상태값 |
+| 프론트엔드 | `docs/product/screens.md` → 해당 기능 요구사항 → `docs/contracts/http-api.md` |
+| PDF·Notion 내보내기 | `docs/requirements/export.md` → HTTP·MCP 계약 → `docs/decisions/0004-export-intent-via-tool.md` |
+| 지식 그래프 | `docs/requirements/knowledge-graph.md` → `docs/data/schema.md` → AI·HTTP·화면 문서 |
+| 하네스·CI·검증 | `docs/engineering/agent-workflow.md` → `docs/engineering/validation.md` → `docs/engineering/git-workflow.md` |
+| 구조·의존 경계 변경 | 이 문서 §2·§3 → `docs/architecture/overview.md` → 관련 ADR |
+| 커밋·PR | `docs/engineering/git-workflow.md` → `docs/engineering/validation.md` |
 
-**`infra` import는 `api/deps.py`, `mcp_server/server.py`, `scripts/`, `tests/integration/` 에서만 허용한다.**
+전체 목차와 단일 원천은 [docs/INDEX.md](docs/INDEX.md), 코드 경로별 계약은 [.harness/doc-routes.json](.harness/doc-routes.json)을 따른다.
 
-| 무엇을 | 어디에 |
-|---|---|
-| SQL 작성 | `infra/repository.py` — 다른 곳에서 쓰지 않는다 |
-| 점수 계산·정렬 | `core/ranking.py` |
-| 프롬프트 | `app/pipeline.py`, `app/agent.py` |
-| MCP 툴 | `mcp_server/tools/` |
+## 5. 작업·검증 규칙
 
-## 3. 코드 컨벤션
+- 작업 전 요구사항 ID 또는 Project Goal, 지금 필요한 이유, 산출물 위치를 확인한다. 셋 중 하나라도 없으면 제안하지 않는다.
+- 파일은 실제 경로·크기·내용을, 데이터는 실제 스키마·행 수·표본 파싱을, DB는 카탈로그·쿼리를, 컨테이너는 실행·헬스 상태를 확인한다. Git은 추적 여부와 이력 확인에만 쓴다.
+- 구현 후 변경 파일을 직접 다시 읽고 `make check`를 실행한다. 통합 자원이 필요한 변경은 관련 통합 검사도 실행한다.
+- 문서에 변경 이력 표를 두지 않는다. 이력은 Git이 갖는다. 채택된 ADR을 바꾸려면 새 ADR로 대체·보완한다.
+- 커밋·PR 규칙은 [Git 워크플로](docs/engineering/git-workflow.md), 코드 규칙은 [코드 컨벤션](docs/engineering/code-conventions.md)을 따른다.
+- `S<n>` 종료 보고에는 문제·미검증·사용자 작업·검증 결과를 적고, 없으면 **없음**이라고 쓴다.
+- 결론뿐 아니라 개념, 필요한 이유, 이 프로젝트에서 작동하는 시점·방식을 설명한다. 처음 쓰는 용어는 풀어 쓴다.
 
-- 포맷·린트: `ruff` · 타입 힌트 필수 · `from __future__ import annotations`
-- 데이터 구조는 Pydantic 모델. dict를 그대로 넘기지 않는다
-- 예외를 삼키지 않는다. 로깅 후 재발생 또는 명시적 처리
-- **모듈 레벨 전역 커넥션·캐시 금지.** 의존성 주입을 쓴다
-- 로깅은 `logger.info("...: %s", v)` 지연 포맷
-
-| 대상 | 규칙 |
-|---|---|
-| 요구사항 ID | `ISS-` `ART-` `CHAT-` `EXP-` `GRPH-` / `NFR-` `EX-` `AC-` `ADR-` |
-| DB | `snake_case` |
-| Python | `snake_case`, 클래스는 `PascalCase` |
-| Vue | `PascalCase.vue`, Composition API + `<script setup lang="ts">` |
-
-## 4. 명령
-
-```bash
-make install                           # .venv 생성 (uv)
-make check                             # 커밋 전 게이트 — 포맷·린트·계층·단위테스트
-make fmt                               # 포맷 + 자동 수정
-make arch                              # 계층 규칙만 (§1 · §2.1)
-make test-all                          # 통합 포함
-
-make up                                # 개발: qdrant만
-make up-full                           # 클린 클론 검증·데모 (NFR-13)
-make migrate                           # 미적용 마이그레이션만 실행
-
-make mcp-inspect                       # MCP Inspector로 툴 검증
-make web-check                         # vue-tsc + 빌드
-```
-
-**커밋 전 `make check`가 통과해야 한다.** §2.1 계층 규칙과 §3 컨벤션은
-`backend/pyproject.toml`의 ruff·import-linter 계약으로 기계 검사되며, 파일 편집 직후
-`.claude/hooks/on-edit.sh`가 같은 검사를 돌려 위반을 즉시 되돌린다.
-검사를 우회하지 않는다 — 규칙을 바꿔야 한다면 계약을 먼저 고친다.
-
-## 5. 문서 규칙
-
-| 정보 | 단일 원천 |
-|---|---|
-| 기능 요구사항·우선순위·상태 | `docs/REQUIREMENTS.md` |
-| 비기능 요구사항·구현 지침 | `docs/TECH_DESIGN.md` |
-| **디렉토리 구조·계층 규칙** | **이 문서 §2** |
-| 상태값 | `docs/DATA.md` |
-| 화면 표기 | `docs/SCREENS.md` |
-| 스키마 | `docs/ERD.md` + `backend/db/migrations/` |
-| HTTP 계약 | `docs/API.md` |
-| MCP 툴 계약 | `docs/MCP_TOOLS.md` |
-| 프롬프트 | `docs/AI_SPEC.md` |
-| **검증 루프·제안 규칙** | `docs/FEEDBACK_LOOPS.md` |
-
-**구조를 바꾸는 변경은 같은 커밋에서 관련 문서를 갱신한다.** 이전 프로젝트에서 구조 문서가 삭제된 모듈을 계속 설명하는 상태로 방치되어, 새 세션이 매번 잘못된 전제로 시작하는 문제가 있었다.
-
-문서에 변경 이력 표를 두지 않는다. 이력은 git이 갖는다. 결정의 배경은 `docs/decisions/`에 ADR로 남긴다. **채택된 ADR의 본문은 수정하지 않는다.**
-
-**이 문서와 `CLAUDE.md`의 합계는 3,000 토큰을 넘지 않는다.** 매 세션 소비되므로 비대해지면 순손실이다.
-
-## 6. 브랜치 · 커밋 · PR
-
-`main`은 보호된다. 직접 push하지 않는다.
-
-```
-feat/<스프린트>-<요약>      feat/s2-repository
-fix/<요구사항 ID>           fix/ISS-003
-docs/<주제>                 docs/mcp-tools
-chore/<주제>
-```
-
-커밋 메시지
-
-```
-<type>(<요구사항 ID>): <요약>
-
-<본문>
-
-ADR-0003 참조
-```
-
-`feat` `fix` `refactor` `test` `docs` `chore`
-
-PR
-
-- 스프린트 단위 또는 그보다 작게 연다
-- 제목은 커밋과 같은 형식
-- 본문에 `docs/ROADMAP.md`의 **완료 기준 중 충족한 항목**을 적는다
-- CI가 초록불이어야 병합한다
-
-## 7. 금지
-
-| 금지 | 이유 |
-|---|---|
-| 에이전트에 파이썬 함수를 툴로 직접 주입 | §1 |
-| MCP 서버에서 LLM 호출 | §1 |
-| `core`에 외부 프레임워크 import | §2.1 |
-| `app`에서 `infra` 직접 import | §2.1 |
-| `infra/repository.py` 밖에서 SQL 작성 | 접근 계층 우회 |
-| 모듈 레벨 전역 DB 커넥션 | 스레드 안전성 |
-| API 키·접속정보 하드코딩 | NFR-10 |
-| 이슈·이벤트·기사연결의 분리 저장 | 원자성 위반 (NFR-08) |
-| 문자열을 반환하는 MCP 툴 | 구조화 출력 규약 위반 |
-| **정규식으로 사용자 의도 분류** | [ADR-0004](docs/decisions/0004-export-intent-via-tool.md) |
-| **가상 이벤트를 최종 타임라인에 포함** | 신뢰성 요건 위반 |
-| 적용된 마이그레이션 파일 수정 | 되돌리기는 새 번호로 |
-| 문서 없이 스키마·API 변경 | §5 |
-| 요구사항에 없는 기능 추가 | 범위는 PRD가 정한다 |
-
-## 8. 작업·제안 전
-
-1. 어느 요구사항 ID 또는 Project Goal에 대응하는가? 없으면 PRD에 먼저 추가
-2. 지금 하지 않으면 무엇이 막히는가?
-3. **산출물이 어디에 기록되는가?** 기록할 곳이 없으면 시기상조다
-4. §1 경계와 §2.1 계층 규칙을 넘지 않는가?
-5. 설계 결정이 필요하면 ADR을 먼저 쓴다
-
-일반론("보통 이렇게 한다", "실무에서는")은 근거가 아니다. 이 프로젝트의 목표·제약과 연결하지 못하면 말하지 않는다.
-
-상세와 되묻기 규약은 `docs/FEEDBACK_LOOPS.md`.
-
-**`S<n>` 종료 보고:** 문제·미검증·사용자 작업·검증 결과를 적고, 없으면 **없음**으로 쓴다.
+AGENTS.md 목표 예산은 현재 고정하지 않는다. `make agent-budget` 측정값을 본 뒤 사용자가 결정한다.

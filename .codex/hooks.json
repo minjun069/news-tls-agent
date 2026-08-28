@@ -1,0 +1,31 @@
+{
+  "description": "news-tls-agent 문서 라우팅과 편집 직후 정적 검사",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/.harness/route_docs.py\" --hook",
+            "timeout": 10,
+            "statusMessage": "관련 계약 문서 확인"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$(git rev-parse --show-toplevel)/.harness/on-edit.sh\"",
+            "timeout": 60,
+            "statusMessage": "편집 결과 정적 검사"
+          }
+        ]
+      }
+    ]
+  }
+}

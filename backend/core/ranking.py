@@ -1,4 +1,4 @@
-"""대표 기사 선정 규칙 — PRD §7.1의 순수 계산."""
+"""대표 기사 선정 규칙 — docs/requirements/issue-view.md 대표 기사 선정 정책의 순수 계산."""
 
 from __future__ import annotations
 

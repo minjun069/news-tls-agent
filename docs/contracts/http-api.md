@@ -1,6 +1,6 @@
 # API 명세서 — news-tls-agent
 
-관련 PRD: [`REQUIREMENTS.md`](REQUIREMENTS.md) · 기술 설계서: [`TECH_DESIGN.md`](TECH_DESIGN.md)
+관련 PRD: [`REQUIREMENTS.md`](../REQUIREMENTS.md) · 기술 설계서: [`TECH_DESIGN.md`](../architecture/overview.md)
 
 Base URL: `http://localhost:8000`
 인증: 없음 (단일 사용자 전제)
@@ -87,7 +87,7 @@ Base URL: `http://localhost:8000`
 - `events`는 `event_order` 오름차순 (AC-006)
 - `primary_article`은 §7.1 정책으로 선정된 대표 기사 (AC-007)
 - `articles`는 `relevance_score` 내림차순 (AC-010)
-- 심층 분석과 핵심 용어 필드는 없다 (PRD §3.3)
+- 심층 분석과 핵심 용어 필드는 없다 ([PRD 비목표](../REQUIREMENTS.md#35-비목표))
 
 **404** — 이슈 없음
 
@@ -172,7 +172,7 @@ data: {"question": "어느 시점의 계엄 관련 사건을 말씀하시나요?
 
 ### 5.4 종료 사유
 
-`done` 이벤트의 `termination` 값. PRD §7.2 정책에 대응한다.
+`done` 이벤트의 `termination` 값. [타임라인 종료 정책](../requirements/timeline.md#수집-루프-종료-정책) 정책에 대응한다.
 
 | 값 | 의미 |
 |---|---|
@@ -273,7 +273,7 @@ data: {"article_ids": [1234567, 1234890], "exports": []}
 | `article` | 기사에서 확인된 내용 | AC-011 |
 | `general` | 기사에 없는 배경 개념 | AC-012 |
 
-화면 표기 방식은 [`SCREENS.md`](SCREENS.md)를 원천으로 한다.
+화면 표기 방식은 [`SCREENS.md`](../product/screens.md)를 원천으로 한다.
 
 ### 7.3 대화 내 내보내기 — CHAT-006
 
@@ -333,7 +333,7 @@ data: {"reason": "data_unavailable", "message": "자료를 불러오지 못했�
 { "reason": "notion_not_configured", "message": "Notion 연결 설정이 필요합니다." }
 ```
 
-화면 메뉴와 대화 두 진입점이 같은 구현을 호출한다 (TECH_DESIGN §4.3).
+화면 메뉴와 대화 두 진입점이 같은 구현을 호출한다 ([아키텍처 구현 지침](../architecture/overview.md#5-구현-지침)).
 
 ---
 
@@ -365,7 +365,7 @@ data: {
 }
 ```
 
-- 그래프는 **기사별로 하나씩** 반환한다. 통합 그래프를 만들지 않는다 (PRD §6.5)
+- 그래프는 **기사별로 하나씩** 반환한다. 통합 그래프를 만들지 않는다 ([지식 그래프 요구사항](../requirements/knowledge-graph.md))
 - 모든 노드·간선이 `article_id`에 귀속된다 (NFR-16)
 
 **Response — 이벤트 1건 이하**
@@ -381,7 +381,7 @@ data: {"reason": "insufficient_events", "message": "그래프를 표시할 만�
 
 API 서버가 MCP 클라이언트로 접속하는 내부 인터페이스다. 외부에 HTTP로 노출하지 않는다.
 
-툴 목록·입출력 스키마·description·에러 코드는 [`MCP_TOOLS.md`](MCP_TOOLS.md)를 원천으로 한다.
+툴 목록·입출력 스키마·description·에러 코드는 [`MCP_TOOLS.md`](mcp-tools.md)를 원천으로 한다.
 
 > 이 문서는 **프론트엔드가 읽는 HTTP 계약**이고, `MCP_TOOLS.md`는 **에이전트가 읽는 툴 계약**이다.
 > 독자와 바뀌는 이유가 다르므로 분리해 관리한다.

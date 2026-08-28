@@ -3,7 +3,7 @@
 .env.*
 !.env.example
 
-# ─── 데이터 (docs/DATA.md §1.3) ───
+# ─── 데이터 (docs/data/source-and-ingestion.md §1.3) ───
 data/raw/*
 !data/raw/.gitkeep
 data/seed/
@@ -32,8 +32,6 @@ downloads/
 logs/
 *.log
 
-# ─── 하네스 세션 상태 (문서 라우팅 마커) ───
-.claude/.state/
 
 # ─── 에디터 ───
 .obsidian/

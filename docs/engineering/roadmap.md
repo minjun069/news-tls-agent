@@ -1,6 +1,6 @@
 # 개발 로드맵 — news-tls-agent
 
-관련 PRD: [`REQUIREMENTS.md`](REQUIREMENTS.md)
+관련 PRD: [`REQUIREMENTS.md`](../REQUIREMENTS.md)
 
 각 스프린트는 **완료 시점에 동작하는 상태**로 끝난다. 중간에 멈춰도 버려지는 산출물이 없도록 순서를 잡았다.
 
@@ -21,18 +21,17 @@ S1 기반 ─┬─ S2 데이터 계층 ─┬─ S4 MCP 서버 ─ S5 생성 �
 - [x] GitHub 리포 `news-tls-agent` 생성
 - [x] 디렉토리 스켈레톤 (`AGENTS.md` §2), `.env.example`, `.gitignore`
 - [x] `backend/pyproject.toml` — `backend/`가 Python 소스 루트이며 자체 패키지는 아니다
-- [x] `CLAUDE.md` — `@AGENTS.md` 한 줄
 - [x] `data/raw/.gitkeep` — 원본 데이터 투입 위치
 
 ### S1-2 개발 하네스
-- [x] `AGENTS.md` — 코드 컨벤션, 디렉토리 구조, 검증 명령, 금지사항
-- [x] ruff 규칙이 §3 컨벤션을 강제 (ANN·I002·G·BLE/TRY·N·S)
-- [x] **import-linter 계약이 §1 경계와 §2.1 계층을 강제** — 계약 5개
+- [x] `AGENTS.md` — 상위 규칙, 상세 프로젝트 트리, 작업별 문서 흐름
+- [x] ruff 규칙이 [`code-conventions.md`](code-conventions.md)를 강제 (ANN·I002·G·BLE/TRY·N·S)
+- [x] **import-linter 계약이 `AGENTS.md` §1·§3 경계를 강제** — 계약 5개
 - [x] `Makefile` — `make check`가 커밋 전 게이트
-- [x] `.claude/settings.json` — 권한 allowlist
-- [x] 편집 후 검사 훅 (`.claude/hooks/on-edit.sh`, exit 2로 에이전트에 피드백)
+- [x] `.harness/` — 도구 독립 문서 라우팅·동기화·검증
+- [x] `.codex/hooks.json` — Codex 편집 전 문서 안내·편집 후 정적 검사
 - [x] **가드 검증** — 일부러 위반을 넣어 5개 계약과 8개 린트 규칙이 잡는 것을 확인
-- [x] **문서 토큰 예산 확인** — 현재 2,744 / 3,000 토큰 (PRD §3.4)
+- [x] **AGENTS.md 크기 측정 도구** 추가 — 목표 예산은 재구성 결과를 보고 결정
 
 > 계층 계약을 코드가 0줄일 때 도입한 이유: 위반이 없는 상태에서 켜면 통과하지만,
 > 코드가 쌓인 뒤 켜면 그때부터는 리팩터링이다.
@@ -51,7 +50,7 @@ S1 기반 ─┬─ S2 데이터 계층 ─┬─ S4 MCP 서버 ─ S5 생성 �
 - [x] ODBC Driver 18 확인, DB `newsagent` 생성
 - [x] Docker Desktop 설치
 - [x] `docker-compose.yml` — `qdrant`(기본) · `mssql`(profile `full`), 이후 서비스는 해당 스프린트에서 추가
-- [x] `.env.example` — 모드 A/B/C 접속 정보 (TECH_DESIGN §4.1)
+- [x] `.env.example` — 모드 A/B/C 접속 정보 ([아키텍처 §4.1](../architecture/overview.md))
 
 **완료 기준**: WSL에서 pyodbc로 Windows 호스트 SQL Server 접속 성공. Qdrant 대시보드 접속 성공. 빈 스켈레톤 PR에서 CI 초록불.
 
@@ -62,16 +61,18 @@ S1 기반 ─┬─ S2 데이터 계층 ─┬─ S4 MCP 서버 ─ S5 생성 �
 | 관련 | ISS-003~005, ART-001~003, NFR-08, NFR-09, NFR-02 |
 |---|---|
 
-- [x] `backend/db/migrations/` — [`ERD.md`](ERD.md) 기준. 테이블 6개, 인덱스 7종
+- [x] `backend/db/migrations/` — [`schema.md`](../data/schema.md) 기준. 테이블 6개, 인덱스 7종
 - [x] `backend/db/migrate.sh` — 미적용 번호만 실행, 스크립트당 트랜잭션
 - [x] `000_bootstrap.sql` — 멱등. `CREATE DATABASE ... COLLATE` + `schema_migrations`
-- [x] `scripts/01_extract_seed.py` — 원본 → 시드 JSONL
-- [x] `scripts/02_load_mssql.py` — 배치 upsert, 멱등성
+- [ ] `scripts/01_extract_seed.py` — 실제 `news.jsonl` 필드 매핑·전체 표본 검증 필요
+- [x] `scripts/02_load_mssql.py` — 정규화된 시드의 배치 upsert, 멱등성
 - [x] `core/models.py`·`core/ports.py` — 데이터 모델과 Repository Protocol
 - [x] `infra/db.py`·`infra/entities.py` — 엔진, 세션, ORM
 - [x] `infra/repository.py` — ports 구현
-- [x] `core/ranking.py` — 대표 기사 선정 3단 타이브레이커 (PRD §7.1). 순수 함수
+- [x] `core/ranking.py` — [대표 기사 선정 정책](../requirements/issue-view.md#대표-기사-선정-정책)의 순수 함수
 - [x] `tests/unit/test_ranking.py` · `tests/integration/test_repository.py`
+
+> `data/raw/news.jsonl`은 실제로 존재하지만 원본 필드명(`article_title`, `article_service_daytime`, `text` 등)이 현재 추출기 입력과 다르다. 매핑과 실제 표본 검증 전에는 전처리 완료로 표시하지 않는다.
 
 **완료 기준**
 - [x] 이슈 → 이벤트 → 기사 3단 조인 질의 동작
@@ -80,7 +81,8 @@ S1 기반 ─┬─ S2 데이터 계층 ─┬─ S4 MCP 서버 ─ S5 생성 �
 - [ ] 실제 시드 적재 후 SSMS 실행계획에서 인덱스 사용 확인
 - [x] 저장 중 외래키 예외 발생 시 부분 데이터 잔존 없음
 
-> 사용자 선행 작업: 원본 데이터를 `data/raw/`에 투입하고 시드 토픽 2~3개를 선정해야 한다.
+> `data/raw/news.jsonl` 투입은 확인됐다. 남은 사용자 작업은 정답 타임라인과 시드 토픽
+> 2~3개를 선정하는 것이다. 원본 필드 매핑과 전처리 검증은 구현 작업에 포함한다.
 
 ---
 
@@ -109,8 +111,8 @@ S1 기반 ─┬─ S2 데이터 계층 ─┬─ S4 MCP 서버 ─ S5 생성 �
 |---|---|
 
 - [ ] `mcp_server/server.py`·`mcp_server/tools/` — FastMCP
-- [ ] 툴 5종 + **description 문구** ([`MCP_TOOLS.md`](MCP_TOOLS.md) §7 작성 규칙)
-- [ ] 응답 규약 `{ok, ...}` / `{ok:false, error:{code,message}}` ([`MCP_TOOLS.md`](MCP_TOOLS.md))
+- [ ] 툴 5종 + **description 문구** ([`MCP_TOOLS.md`](../contracts/mcp-tools.md) §7 작성 규칙)
+- [ ] 응답 규약 `{ok, ...}` / `{ok:false, error:{code,message}}` ([`MCP_TOOLS.md`](../contracts/mcp-tools.md))
 - [ ] 감사 로그
 - [ ] payload 함수와 데코레이터 분리
 - [ ] `tests/unit/test_mcp_payloads.py` — payload 함수 (MCP 없이)
@@ -132,7 +134,7 @@ make mcp-inspect
 | 관련 | ISS-001, ISS-006, EX-01~EX-05, AC-001~003, AC-008, AC-022, AC-023 |
 |---|---|
 
-가장 복잡한 스프린트다. LLM 호출이 8종 들어간다 ([`AI_SPEC.md`](AI_SPEC.md) §2).
+가장 복잡한 스프린트다. LLM 호출이 8종 들어간다 ([`AI_SPEC.md`](../ai/specification.md) §2).
 
 - [ ] `core/models.py`·`core/errors.py` — 도메인 스키마와 예외
 - [ ] P1 질의 의도 해석 + 되묻기
@@ -143,7 +145,7 @@ make mcp-inspect
 - [ ] P6 충분성 검토
 - [ ] P7 가상 이벤트 생성
 - [ ] P8 타임라인 병합
-- [ ] 수집 루프 오케스트레이션 + **종료 조건 4가지** (PRD §7.2)
+- [ ] 수집 루프 오케스트레이션 + **종료 조건 4가지** ([타임라인 종료 정책](../requirements/timeline.md#수집-루프-종료-정책))
 - [ ] 인용 검증 → 트랜잭션 저장
 - [ ] 파이프라인 실행 로그 (NFR-14)
 - [ ] CLI 진입점
@@ -153,11 +155,11 @@ make mcp-inspect
 **완료 기준**
 - CLI로 토픽 입력 시 MS-SQL에 이슈·이벤트·기사연결 저장
 - 허구 ID를 반환하는 모의 LLM으로도 미실재 기사가 저장되지 않음
-- **가상 이벤트가 최종 결과에 포함되지 않음** ([`AI_SPEC.md`](AI_SPEC.md) §5.1)
+- **가상 이벤트가 최종 결과에 포함되지 않음** ([`AI_SPEC.md`](../ai/specification.md) §5.1)
 - 종료 조건 4가지가 각각 동작 (모의 LLM으로 검증)
 - 검색 0건 시 근거 없는 이슈가 저장되지 않음 (EX-01, EX-02)
 
-> **선행 검증**: 착수 직후 Gemini 구조화 출력과 도구 호출 최소 예제를 먼저 확인한다 (PRD §8).
+> **선행 검증**: 착수 직후 Gemini 구조화 출력과 도구 호출 최소 예제를 먼저 확인한다 ([PRD 공통 리스크](../REQUIREMENTS.md#7-공통-리스크)).
 
 ---
 
@@ -171,7 +173,7 @@ make mcp-inspect
 - [ ] `infra/mcp_client.py` — `langchain-mcp-adapters`
 - [ ] `app/agent.py` — LangGraph 그래프. `core.ports` 타입으로 주입받는다
 - [ ] 출처 구분 응답 (CHAT-004) — `token` 이벤트의 `source` 필드
-- [ ] 엔드포인트 ([`API.md`](API.md))
+- [ ] 엔드포인트 ([`API.md`](../contracts/http-api.md))
 - [ ] SSE — 생성 진행(stage/round), 대화 토큰, 되묻기
 - [ ] 에이전트 실행 로그 (NFR-15)
 - [ ] `tests/integration/test_api.py`
@@ -188,7 +190,7 @@ make mcp-inspect
 
 ## S7 · 프론트엔드
 
-| 관련 | 전 기능. 화면 기준은 [`SCREENS.md`](SCREENS.md) |
+| 관련 | 전 기능. 화면 기준은 [`SCREENS.md`](../product/screens.md) |
 |---|---|
 
 - [ ] `npm create vite@latest web -- --template vue-ts`
@@ -212,7 +214,7 @@ make mcp-inspect
 |---|---|
 
 ### S8-1 지식 그래프
-- [ ] P9 엔티티·관계 추출 ([`AI_SPEC.md`](AI_SPEC.md) §2.10)
+- [ ] P9 엔티티·관계 추출 ([`AI_SPEC.md`](../ai/specification.md) §2.10)
 - [ ] `articles.entities_extracted_at` 기반 추출 여부 판정
 - [ ] 기사 1건 단위 트랜잭션 저장
 - [ ] `GET /issues/{id}/graph` — SSE 추출 진행 + 기사별 그래프 반환
@@ -237,7 +239,7 @@ make mcp-inspect
 ## S9 · 마무리
 
 - [ ] CI 확장 — 서비스 컨테이너(MS-SQL, Qdrant)로 통합 테스트
-- [ ] E2E 테스트 — 생성 → 조회 → 근거 확인 → 대화 → 내보내기 (PRD §3.4)
+- [ ] E2E 테스트 — 생성 → 조회 → 근거 확인 → 대화 → 내보내기 ([PRD Success Metrics](../REQUIREMENTS.md#36-success-metrics))
 - [ ] CD — `api`·`mcp_server` 이미지 빌드 → GHCR 푸시
 - [ ] `README.md` — 아키텍처, 실행 절차, CI 배지
 - [ ] 클린 클론 재현 테스트 — `docker compose --profile full up -d` 한 줄 (NFR-13, 모드 B)

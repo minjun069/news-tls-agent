@@ -1,6 +1,6 @@
 # MCP 툴 명세 — news-tls-agent
 
-관련 PRD: [`REQUIREMENTS.md`](REQUIREMENTS.md) · HTTP 계약: [`API.md`](API.md)
+관련 PRD: [`REQUIREMENTS.md`](../REQUIREMENTS.md) · HTTP 계약: [`API.md`](http-api.md)
 
 > **`API.md`와 역할이 다르다.** `API.md`는 프론트엔드가 읽는 HTTP 계약이고, 이 문서는 **에이전트가 읽는 툴 계약**이다.
 > 특히 각 툴의 `description`은 **곧 프롬프트**다. 에이전트가 그 문장을 읽고 호출 여부를 판단하므로 문구 자체가 설계 대상이다.
@@ -106,7 +106,7 @@ def search_articles(query: str, ...) -> dict:
 - 기간 필터는 검색 단계에서 적용된다 (NFR-05)
 - 결과 0건도 `ok: true`다. `articles`가 빈 배열이고 `message`가 그 사실을 알린다
 
-관련: CHAT-002, [ADR-0003](decisions/0003-search-strategies.md)
+관련: CHAT-002, [ADR-0003](../decisions/0003-search-strategies.md)
 
 ---
 
@@ -266,7 +266,7 @@ Notion
 
 화면 메뉴 경로(`POST /issues/{id}/export`)와 **같은 구현**을 호출한다.
 
-관련: CHAT-006, AC-015, AC-016, EXP-001, EXP-002, [ADR-0004](decisions/0004-export-intent-via-tool.md)
+관련: CHAT-006, AC-015, AC-016, EXP-001, EXP-002, [ADR-0004](../decisions/0004-export-intent-via-tool.md)
 
 ---
 

@@ -43,7 +43,7 @@ def test_server_reachable(settings: Settings) -> None:
 
 
 def test_collation_matches_config(settings: Settings) -> None:
-    """서버 collation이 설정과 일치한다 (TECH_DESIGN §4.2).
+    """서버 collation이 설정과 일치한다 (docs/architecture/overview.md §4.2).
 
     네이티브 설치와 컨테이너의 기본값이 달라, 어긋나면 한글 정렬·NVARCHAR 비교·
     LIKE 동작이 환경마다 달라진다. 로컬은 통과하고 CI만 깨지는 원인이 된다.

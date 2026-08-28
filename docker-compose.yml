@@ -1,4 +1,4 @@
-# 실행 모드는 docs/TECH_DESIGN.md §4 참조.
+# 실행 모드는 docs/architecture/overview.md §4 참조.
 #
 #   docker compose up -d                  모드 A — qdrant만 (개발)
 #   docker compose --profile full up -d   모드 B — 전부 (클린 클론 검증·데모, NFR-13)
@@ -29,7 +29,7 @@ services:
       # `${VAR:?}`는 프로필과 무관하게 해석되어 모드 A(qdrant만)까지 막는다.
       # 비어 있으면 컨테이너가 SQL Server 자체 오류로 즉시 종료하므로 그걸로 충분하다.
       MSSQL_SA_PASSWORD: ${MSSQL_PASSWORD:-}
-      # 네이티브 설치와 collation을 맞춘다 (TECH_DESIGN §4.2).
+      # 네이티브 설치와 collation을 맞춘다 (docs/architecture/overview.md §4.2).
       # 다르면 한글 정렬·NVARCHAR 비교·LIKE가 달라져 로컬만 통과하는 상황이 생긴다.
       MSSQL_COLLATION: ${MSSQL_COLLATION:-Korean_Wansung_CI_AS}
     ports:
@@ -49,7 +49,7 @@ services:
     restart: unless-stopped
 
   # api · mcp · web은 각각 S6 · S4 · S7에서 추가한다.
-  # docs/ROADMAP.md 참조. Dockerfile이 생기기 전에는 정의하지 않는다.
+  # docs/engineering/roadmap.md 참조. Dockerfile이 생기기 전에는 정의하지 않는다.
 
 volumes:
   qdrant-data:
