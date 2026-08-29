@@ -34,7 +34,7 @@ S2 진행 중
 
 S2 완료
   S3-A1 S2 산출물 병합·감사
-        ├─ S3-A2 BM25 실제 구현
+        ├─ S3-A2 BM25 실데이터 검증
         └─ S3-A3 03_build_vectors 구현·실행
                   ↓
         S3-A4 app/search.py 3종 검색 조립
@@ -54,8 +54,9 @@ S3-P1은 나머지 병렬 작업의 입력 계약이므로 먼저 끝낸다. P1 
 
 | 항목 | 내용 |
 |---|---|
-| 관련 | NFR-04, NFR-05, ADR-0003 |
+| 관련 | NFR-04, NFR-05, ADR-0003, ADR-0005 |
 | 산출물 | `backend/core/models.py`, `backend/core/ports.py`, 관련 기술 문서와 기계 검사 |
+| 상태 | 완료 — Qdrant dense·BM25 결정, core 검색 계약과 단위 테스트 반영 |
 | 권장 모델 | `gpt-5.6-sol` |
 | 추론 수준 | `high` |
 
@@ -69,15 +70,10 @@ S3-P1은 나머지 병렬 작업의 입력 계약이므로 먼저 끝낸다. P1 
 - 기간 필터를 검색기 내부에서 `top_k`보다 먼저 적용한다는 규칙
 - RRF의 기본 `k`, 순위 시작값, 동률 처리와 결정론 규칙
 
-BM25 알고리즘은 `app/search.py`에 두지 않는다. `app`은 포트를 조립하고 실제 구현은
-`infra` 어댑터가 담당한다. 우선 후보는 `infra/bm25.py`이며, 실제 백엔드는 아래 기준으로
-비교한 뒤 기술 문서 또는 새 ADR에 기록한다.
-
-- 일반 전문 검색 점수가 아니라 실제 BM25를 제공하는가
-- 한국어 토큰화 방식이 명시되는가
-- OR·AND 질의와 기간 선필터를 지원하는가
-- S2 시드로 인덱스를 재구축할 수 있는가
-- SQL이 필요할 경우 `infra/repository.py` 밖에 SQL을 작성하지 않는가
+BM25는 [ADR-0005](../decisions/0005-qdrant-dense-sparse-search.md)에 따라 Qdrant `articles`
+컬렉션의 sparse `bm25` named vector로 구현한다. 같은 포인트의 dense `dense` vector가 의미
+검색을 담당하고, `infra/qdrant.py`가 `KeywordSearcher`와 `VectorStore` 포트를 함께 구현한다.
+한국어에는 multilingual tokenizer를 사용하며 BM25 입력 원문은 payload에 저장하지 않는다.
 
 완료 조건은 P2와 P3가 SDK 타입이나 임시 타입을 새로 만들지 않고 이 계약만으로 구현을
 시작할 수 있는 상태다.
@@ -113,10 +109,10 @@ ADR-0003에서 제외한 검색기별 가중치와 `k` 튜닝은 추가하지 �
 
 실제 API와 컨테이너를 호출하지 않고 주입한 가짜 클라이언트로 다음 동작을 검증한다.
 
-- `articles` 컬렉션, Cosine 거리, 주입된 벡터 차원
+- `articles` 컬렉션, `dense` Cosine, `bm25` sparse, 주입된 dense 벡터 차원
 - `article_id`, `service_date`, `title`, `category_middle` payload
 - 같은 기사 ID 재적재의 멱등성
-- Qdrant 기간 필터가 검색 요청에 포함되고 그 뒤 `top_k`가 적용되는지
+- keyword·semantic 요청 모두 Qdrant 기간 필터가 먼저 포함되고 그 뒤 `top_k`가 적용되는지
 - 문서 배치 임베딩과 단일 검색 질의 임베딩의 구분
 - 자격증명·모델명의 환경변수 주입
 - SDK 예외를 삼키지 않고 호출자가 재시도 여부를 판단할 수 있는 오류 경계
@@ -130,7 +126,7 @@ ADR-0003에서 제외한 검색기별 가중치와 `k` 튜닝은 추가하지 �
 
 - `backend/scripts/03_build_vectors.py` 구현과 실제 실행
 - 실제 임베딩 API 호출과 실제 Qdrant 포인트 적재
-- BM25 알고리즘과 한국어 토큰화 구현
+- 실제 Qdrant에서 BM25 인덱싱·OR·AND·기간 필터 검증
 - `backend/app/search.py`의 세 검색 방식 조립
 - 실데이터 기간 필터 및 세 방식 결과 비교
 - 로드맵의 S3 완료 체크
@@ -150,16 +146,17 @@ S2 완료 커밋을 S3 브랜치에 병합한 뒤 파일 존재를 Git 상태로
 쿼리로 실제 기사 수를 확인한다. 불일치가 있으면 벡터 적재로 진행하지 않고 S2 계약과 산출물 중
 어느 쪽이 다른지 먼저 해결한다.
 
-### S3-A2 · BM25 실제 구현
+### S3-A2 · BM25 실데이터 검증
 
 | 항목 | 내용 |
 |---|---|
-| 입력 | P1의 위치 결정, A1에서 확인한 기사 집합 |
+| 입력 | P1 계약, P3 Qdrant 어댑터, A1에서 확인한 기사 집합 |
 | 권장 모델 | `gpt-5.6-sol` |
 | 추론 수준 | `high` |
 
-선택한 `infra` 어댑터에 BM25, 한국어 토큰화, OR·AND 조합, 기간 선필터를 구현한다. 같은
-입력과 인덱스에서 결과가 결정론적이어야 하며, 검색 후 날짜를 제거하는 방식은 허용하지 않는다.
+P3가 구현한 Qdrant 어댑터를 실제 시드와 컨테이너에 연결해 BM25 인덱싱, multilingual
+tokenizer, OR·AND 조합, 기간 선필터가 계약대로 동작하는지 검증한다. 같은 입력과 인덱스에서
+결과가 결정론적이어야 하며, 검색 후 날짜를 제거하는 방식은 허용하지 않는다.
 
 ### S3-A3 · 벡터 빌드 구현과 실제 실행
 

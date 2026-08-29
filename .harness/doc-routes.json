@@ -33,6 +33,9 @@
     {
       "name": "AI pipeline and retrieval",
       "paths": [
+        "backend/core/models.py",
+        "backend/core/ports.py",
+        "backend/core/ranking.py",
         "backend/app/pipeline.py",
         "backend/app/agent.py",
         "backend/app/search.py",

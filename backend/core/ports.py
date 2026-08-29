@@ -8,7 +8,50 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Protocol
 
-from core.models import Article, IssueCitation, IssueCreate, IssueDetail
+from core.models import (
+    Article,
+    IssueCitation,
+    IssueCreate,
+    IssueDetail,
+    KeywordQuery,
+    SearchHit,
+    SearchOptions,
+    VectorPoint,
+)
+
+
+class EmbeddingProvider(Protocol):
+    def embed_documents(self, texts: Sequence[str]) -> list[tuple[float, ...]]:
+        """적재할 문서들을 같은 차원의 dense 벡터로 변환한다."""
+        ...
+
+    def embed_query(self, text: str) -> tuple[float, ...]:
+        """검색 문장을 dense 질의 벡터로 변환한다."""
+        ...
+
+
+class KeywordSearcher(Protocol):
+    def search_keywords(self, query: KeywordQuery) -> list[SearchHit]:
+        """기간을 먼저 제한한 뒤 BM25 순위 결과를 반환한다."""
+        ...
+
+
+class VectorStore(Protocol):
+    def ensure_collection(self, vector_size: int) -> None:
+        """dense·BM25 sparse 구성을 가진 검색 컬렉션을 멱등하게 준비한다."""
+        ...
+
+    def upsert_points(self, points: Sequence[VectorPoint]) -> int:
+        """기사 ID 기준으로 포인트를 추가하거나 덮어쓰고 처리 건수를 반환한다."""
+        ...
+
+    def search_vector(
+        self,
+        vector: Sequence[float],
+        options: SearchOptions,
+    ) -> list[SearchHit]:
+        """기간을 먼저 제한한 뒤 dense 벡터 순위 결과를 반환한다."""
+        ...
 
 
 class Repository(Protocol):

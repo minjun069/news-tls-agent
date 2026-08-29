@@ -36,7 +36,7 @@
 ┌─────────────┐          ┌──────────────┐
 │  MS-SQL     │          │   Qdrant     │
 │  (네이티브)  │          │  (컨테이너)   │
-│ 기사·이슈    │          │  임베딩       │
+│ 기사·이슈    │          │ dense·BM25   │
 │ 엔티티·관계  │          │              │
 └─────────────┘          └──────────────┘
 ```
@@ -49,7 +49,7 @@
 | api | 에이전트 오케스트레이션, 파이프라인, 세션 없는 REST/SSE | 저장소에 직접 접근하지 않음 |
 | mcp_server | 데이터 접근 계약, 검색, 감사 로그 | **LLM을 호출하지 않음** |
 | MS-SQL | 기사·이슈·엔티티·관계 원본 | — |
-| Qdrant | 임베딩 벡터, 페이로드 필터 | 원문 보관하지 않음 |
+| Qdrant | dense 의미 벡터, sparse BM25, 페이로드 필터 | 원문 보관하지 않음 |
 
 ### 1.2 의존 방향
 
@@ -77,7 +77,7 @@
 | DB | MS-SQL Server Developer Edition | 로컬 네이티브 설치 |
 | DB 드라이버 | SQLAlchemy + pyodbc (ODBC Driver 18) | |
 | Vector DB | Qdrant | Docker 컨테이너 |
-| Search Engine | BM25 · 벡터 · RRF 결합 **3종 모두 구현** | 에이전트가 선택하거나 전부 수행 (NFR-04) |
+| Search Engine | Qdrant BM25 · dense 벡터 · core RRF **3종 모두 구현** | 에이전트가 선택하거나 전부 수행 (NFR-04) |
 | AI | Google Gemini (`gemini-2.5-flash`) | 보유 키 기준 |
 | Embedding | Google `text-embedding-004` | 차원수는 착수 시 확인 |
 | Agent | LangGraph `create_react_agent` | |
@@ -130,6 +130,10 @@
 - 우선순위: Must
 - 검증: 세 방식이 각각 호출 가능하고, 에이전트가 방식을 선택한 기록이 남음
 - 관련: CHAT-002, [타임라인 요구사항](../requirements/timeline.md), [ADR-0003](../decisions/0003-search-strategies.md)
+
+BM25와 의미 검색은 Qdrant `articles` 컬렉션의 sparse `bm25`와 dense `dense` named vector로
+구현한다. 두 결과는 core 타입으로 변환한 뒤 애플리케이션의 순수 RRF 함수로 결합한다.
+상세 결정은 [ADR-0005](../decisions/0005-qdrant-dense-sparse-search.md)를 따른다.
 
 > 한 방식으로 고정하지 않는 이유: 뉴스 도메인은 고유명사·날짜처럼 정확 일치가 필요한 질의와, 표현이 다른 개념 질의가 섞여 있다. 어느 하나가 항상 낫지 않다.
 
