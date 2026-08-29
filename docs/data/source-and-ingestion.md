@@ -167,6 +167,42 @@ data/seed/*.jsonl                    ← 선정 토픽 기사만 추출
 현재 추출기는 이 원본 필드명을 아직 받지 못하므로 실제 전처리는 미완료다. 토픽 선정 방식과
 필터 기준을 확정한 뒤 매핑, 표본 검증, 전체 행 검증을 함께 수행한다.
 
+#### 3.1.1 평가 정답 파일
+
+실행 입력과 평가 정답은 아래처럼 분리한다.
+
+- `data/seed/<topic>.articles.jsonl`: 정규화된 후보 기사. 타임라인 생성 LLM에 제공할 수 있다.
+- `data/seed/<topic>.gold.json`: 사람이 실제 기사로 확인한 정답 사건과 검색·평가 기준. 후보
+  추출과 결과 평가에만 사용하며 타임라인 생성 LLM 입력에는 포함하지 않는다.
+
+`gold.json`은 UTF-8 JSON 객체이며 최상위 형식은 다음과 같다.
+
+| 필드 | 형식 | 의미 |
+|---|---|---|
+| `schema_version` | 정수 | 현재 값은 `1` |
+| `topic_id` | 문자열 | 파일명과 대응하는 안정적인 영문 식별자 |
+| `topic` | 문자열 | 평가할 토픽명 |
+| `period` | `{start, end}` | 최초 후보 검색 범위. 날짜는 `YYYY-MM-DD`, 양 끝 포함 |
+| `people` | 문자열 배열 | 토픽 전체의 인물명과 검색 별칭 |
+| `organizations` | 문자열 배열 | 토픽 전체의 기관명과 검색 별칭 |
+| `recall_keywords` | 문자열 배열 | 최초 검색에 OR로 적용할 재현율 중심 검색어 |
+| `expansion_rules` | 객체 배열 | `trigger`, `action`으로 구성한 검색 확장 순서 |
+| `omission_risks` | 객체 배열 | `risk`, `signal`, `expansion`으로 구성한 누락 점검 기준 |
+| `events` | 객체 배열 | 날짜순 정답 사건 목록 |
+
+각 `events` 원소는 `event_id`, `period`, `title`, `summary`, `people`, `organizations`,
+`recall_keywords`, `evidence_articles`를 가진다. `event_id`는 파일 안에서 유일해야 한다.
+`evidence_articles`는 한 건 이상이어야 하며 각 원소는 원본의 `article_id`, 초 단위
+`service_datetime`, `title`, `url`을 그대로 기록한다. 사건 기간과 검색 필드는 후보를 찾는
+평가 준비 자료이고, `evidence_articles`는 정답 사건이 실제 원본에 존재함을 감사하는 자료다.
+
+후보 선별 뒤 `evidence_articles` ID 자체가 검색 결과에 있는지를 묻지 않는다. 커버리지는
+정답 사건마다 **관련 판정을 받은 서로 다른 선별 기사**가 한 건 이상인지로 계산한다. 전체
+사건의 커버리지가 100%가 아니면 해당 `coverage_gap` 사건에 `expansion_rules`를 순서대로
+적용한다. 사건당 서로 다른 기사 두 건 이상은 보조 지표로 기록하되 필수 통과 조건으로 삼지
+않는다. 확장 뒤 새 후보가 없거나 관련 판정 기사가 계속 0건이면 자동으로 사건을 삭제하지
+않고 수동 검토 대상으로 남긴다.
+
 ### 3.2 MS-SQL 적재
 
 - `--batch-size` 단위 upsert
