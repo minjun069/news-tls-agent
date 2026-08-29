@@ -147,13 +147,14 @@ S1 기반 ─┬─ S2 데이터 계층 ─┬─ S4 MCP 서버 ─ S5 생성 �
 
 ## S3 · 벡터 계층
 
-| 관련 | NFR-04, NFR-05, ADR-0003 |
+| 관련 | NFR-04, NFR-05, ADR-0003, ADR-0005 |
 |---|---|
 
 세부 작업 순서, S2와의 병렬 경계, 작업 단위별 모델·검증 게이트는
 [`S3 벡터 계층 실행계획`](s3-vector-layer-plan.md)을 따른다.
 
-- [ ] Qdrant `articles` 컬렉션 생성 (Cosine, payload 4종)
+- [x] `core/models.py`·`core/ports.py` — 검색 계약과 BM25 구현 위치 결정 (S3-P1)
+- [ ] Qdrant `articles` 컬렉션 생성 (`dense` Cosine + `bm25` sparse, payload 4종)
 - [ ] `scripts/03_build_vectors.py` — 임베딩 적재, 배치·재시도
 - [ ] `infra/qdrant.py`·`infra/embedding.py`
 - [ ] `core/ranking.py` — RRF 결합 (순수 계산)

@@ -264,13 +264,28 @@ CONTENT: {본문}
 | 항목 | 값 |
 |---|---|
 | 컬렉션명 | `articles` |
-| 거리 함수 | Cosine |
-| 벡터 차원 | 임베딩 모델 기준 (착수 시 확인) |
+| dense named vector | `dense`, Cosine, 차원은 임베딩 모델 기준으로 착수 시 확인 |
+| sparse named vector | `bm25`, Qdrant BM25, IDF modifier |
+| BM25 텍스트 처리 | multilingual tokenizer, stemmer 없음, stopwords 없음 |
 | payload | `article_id`, `service_date`, `title`, `category_middle` |
 
-payload에 `service_date`를 두는 이유는 **기간 필터를 검색 단계에서 적용**하기 위함이다(NFR-05). 가상 타임라인이 기간을 정하므로 이 필터가 실제로 쓰인다.
+`title + summary + content` 결합 문자열은 dense와 BM25 vector 생성에 모두 쓰지만 payload에는
+저장하지 않는다. dense 임베딩이 실패한 기사도 `bm25`만 적재해 키워드 검색 대상으로 남긴다.
 
-### 4.3 결합 검색
+payload에 `service_date`를 두는 이유는 **기간 필터를 검색 단계에서 적용**하기 위함이다
+(NFR-05). 키워드와 의미 검색 모두 Qdrant query filter로 기간을 먼저 제한한 뒤 `top_k`를
+적용한다.
+
+### 4.3 키워드 검색
+
+P3가 만든 키워드 묶음과 `OR`·`AND` 연산자를 `KeywordQuery`로 전달한다. Qdrant 어댑터는
+각 term을 같은 기간 필터로 BM25 검색하고, OR은 기사 ID 합집합, AND는 교집합으로 결합한다.
+같은 기사에 대한 term별 BM25 점수는 합산하며 집합 결합 뒤 최종 `top_k`를 적용한다.
+
+BM25 ingest와 query는 같은 multilingual tokenizer 설정을 사용한다. 기본 영어 stemming과
+stopword 제거는 한국어 기사에 적용하지 않는다.
+
+### 4.4 결합 검색
 
 RRF(Reciprocal Rank Fusion)로 순위를 결합한다.
 
@@ -278,7 +293,11 @@ RRF(Reciprocal Rank Fusion)로 순위를 결합한다.
 score(d) = Σ  1 / (k + rank_i(d))
 ```
 
-관련 결정: [ADR-0003](../decisions/0003-search-strategies.md)
+`k=60`, 각 검색 목록의 순위는 1부터 시작한다. RRF 점수가 같으면 `article_id` 오름차순으로
+정렬한다. Qdrant의 내장 fusion을 쓰지 않고 `core.ranking`의 순수 함수로 계산한다.
+
+관련 결정: [ADR-0003](../decisions/0003-search-strategies.md),
+[ADR-0005](../decisions/0005-qdrant-dense-sparse-search.md)
 
 ---
 

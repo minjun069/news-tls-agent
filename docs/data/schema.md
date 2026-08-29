@@ -240,8 +240,9 @@ Qdrant는 별도 저장소이며 외래키로 연결되지 않는다. `articles.
 
 | | MS-SQL | Qdrant |
 |---|---|---|
-| 보관 | 원문·메타데이터·이슈·엔티티 | 임베딩 벡터 |
+| 보관 | 원문·메타데이터·이슈·엔티티 | dense 의미 벡터·BM25 sparse 벡터 |
 | 키 | `article_id` (PK) | payload `article_id` |
 | 정합성 | 외래키로 강제 | **적재 스크립트가 보장** |
 
-검색은 Qdrant에서 `article_id` 목록을 얻고 원문은 MS-SQL에서 조회하는 순서로 동작한다. 조회되지 않는 ID는 결과에서 제외한다.
+키워드·의미 검색은 Qdrant에서 `article_id` 목록을 얻고 원문은 MS-SQL에서 조회하는 순서로
+동작한다. 조회되지 않는 ID는 결과에서 제외한다. Qdrant payload에는 기사 원문을 저장하지 않는다.

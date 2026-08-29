@@ -108,8 +108,9 @@ API 오류 응답의 `reason` 값으로 노출된다. 화면 표기는 [`SCREENS
 
 | 상태 | 의미 | 처리 |
 |---|---|---|
-| `적재 완료` | 벡터 생성·저장 성공 | 의미 검색 대상 |
-| `적재 실패` | 임베딩 생성 실패 | 키워드 검색으로만 조회됨. 재적재 대상 |
+| `적재 완료` | dense와 BM25 sparse vector 저장 성공 | 세 검색 방식 대상 |
+| `부분 적재` | dense 임베딩 실패, BM25 sparse 저장 성공 | 키워드 검색 대상. dense 재적재 대상 |
+| `적재 실패` | Qdrant 포인트 저장 실패 | 검색 제외. 재적재 대상 |
 
 > 벡터가 없는 기사도 **키워드 검색으로는 조회된다.** 검색 방식을 셋 다 갖춘 구성이 한쪽 실패에 강한 이유다 (NFR-04).
 
@@ -211,10 +212,14 @@ data/seed/*.jsonl                    ← 선정 토픽 기사만 추출
 
 ### 3.3 벡터 적재
 
-- 임베딩 텍스트: `제목 + 요약 + 본문`
-- 청킹하지 않음 (기사 1건 = 벡터 1개)
+- dense·BM25 입력 텍스트: `제목 + 요약 + 본문`
+- 청킹하지 않음 (기사 1건 = Qdrant 포인트 1개)
+- named vector: `dense`(Cosine), `bm25`(sparse, IDF modifier)
+- BM25: multilingual tokenizer, stemmer 없음, stopwords 없음
 - payload: `article_id`, `service_date`, `title`, `category_middle`
-- 실패 시 지수 백오프 재시도 (EX-04)
+- 원문·결합 텍스트는 payload에 저장하지 않음
+- dense 임베딩 실패 시 BM25 sparse point는 저장하고 dense만 재적재 대상으로 남김
+- Qdrant 저장 실패 시 지수 백오프 재시도 (EX-04)
 
 ### 3.4 실행 순서
 
@@ -228,7 +233,7 @@ MS-SQL 적재가 벡터 적재보다 **먼저** 수행되어야 한다. 벡터 �
 |---|---|
 | 이벤트 → 기사 참조 | MS-SQL 외래키 (NFR-09) |
 | 엔티티·관계 → 기사 참조 | MS-SQL 외래키 (NFR-16) |
-| Qdrant payload → 기사 | 적재 스크립트가 보장. DB 제약 없음 |
+| Qdrant dense·BM25 payload → 기사 | 적재 스크립트가 보장. DB 제약 없음 |
 | 재적재 안전성 | 두 적재 스크립트 모두 멱등 |
 
 Qdrant에는 있으나 MS-SQL에 없는 `article_id`가 생길 수 있다. 검색 결과를 원문 조회로 확인하는 단계에서 **조회되지 않는 ID는 결과에서 제외**한다.
