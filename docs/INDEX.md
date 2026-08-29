@@ -14,6 +14,7 @@
 | 프롬프트·생성·검색·근거 전략 | [`ai/specification.md`](ai/specification.md) |
 | 화면 흐름·표기 정책 | [`product/screens.md`](product/screens.md) |
 | 작업 순서와 완료 기준 | [`engineering/roadmap.md`](engineering/roadmap.md) |
+| S3 벡터 계층 병렬·후속 실행계획 | [`engineering/s3-vector-layer-plan.md`](engineering/s3-vector-layer-plan.md) |
 | AI 작업 방식·피드백 루프 | [`engineering/agent-workflow.md`](engineering/agent-workflow.md) |
 | 코드 규칙 | [`engineering/code-conventions.md`](engineering/code-conventions.md) |
 | Git·커밋·PR 규칙 | [`engineering/git-workflow.md`](engineering/git-workflow.md) |
