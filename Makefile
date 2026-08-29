@@ -3,7 +3,7 @@
 
 BE := backend
 
-.PHONY: help install check fmt lint arch test test-all doc-sync docs-for agent-budget up up-full down migrate mcp-inspect web-check
+.PHONY: help install check fmt lint arch test test-all doc-sync doc-ack docs-for agent-budget up up-full down migrate mcp-inspect web-check
 
 help:
 	@echo "install       backend .venv 생성 (uv)"
@@ -11,6 +11,7 @@ help:
 	@echo "fmt           Python 포맷 + 자동 수정"
 	@echo "arch          계층 의존 계약"
 	@echo "doc-sync      계약 문서 동반 변경 + Markdown 링크"
+	@echo "doc-ack       REASON='근거'로 계약 변경 없음 검토 기록"
 	@echo "docs-for      PATHS='경로 ...'에 필요한 계약 문서 출력"
 	@echo "agent-budget  AGENTS.md 현재 크기 보고(강제 기준 없음)"
 	@echo "test-all      MS-SQL · Qdrant 포함 통합 테스트"
@@ -44,6 +45,10 @@ doc-sync:
 	@python3 .harness/check_doc_sync.py --validate-map > /dev/null
 	@python3 .harness/check_doc_sync.py
 	@python3 .harness/check_markdown_links.py
+
+doc-ack:
+	@test -n "$(REASON)" || (echo "REASON에 계약이 유지되는 구체적 근거를 입력하세요" >&2; exit 2)
+	@python3 .harness/check_doc_sync.py --acknowledge-no-contract-change "$(REASON)"
 
 docs-for:
 	@python3 .harness/route_docs.py $(PATHS)

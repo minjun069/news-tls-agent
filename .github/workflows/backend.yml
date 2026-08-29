@@ -5,10 +5,6 @@ on:
     branches: [main]
   pull_request:
 
-defaults:
-  run:
-    working-directory: backend
-
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -23,25 +19,10 @@ jobs:
           enable-cache: true
 
       - name: 의존성 설치
-        run: uv sync
+        run: make install
 
-      - name: 린트
-        run: |
-          uv run ruff check .
-          uv run ruff format --check .
-
-      - name: 계층 규칙
-        run: uv run lint-imports
-
-      - name: 단위 테스트
-        run: uv run pytest tests/unit || [ $? -eq 5 ]
-
-      - name: 문서 라우팅과 링크
-        working-directory: .
-        run: |
-          python3 .harness/check_doc_sync.py --validate-map
-          python3 .harness/check_doc_sync.py --verbose
-          python3 .harness/check_markdown_links.py
+      - name: 전체 검사
+        run: make check
 
   # MS-SQL·Qdrant 서비스 통합 테스트는 S9에서 추가한다.
   # docs/engineering/agent-workflow.md L3 참조.
