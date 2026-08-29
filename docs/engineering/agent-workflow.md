@@ -32,11 +32,13 @@ Git은 파일의 추적 여부와 이력을 알려줄 뿐, 실제 파일·데이
 
 1. `AGENTS.md` §4에서 작업 종류를 찾는다.
 2. 표의 문서를 왼쪽부터 읽는다.
-3. 변경 후보 경로가 있으면 `python3 .harness/route_docs.py <경로...>`로 추가 계약 문서를 확인한다.
+3. 변경 후보 경로가 있으면 `python3 .harness/route_docs.py <경로...>`를 실행한다. 이 명령은 파일 경로를 `.harness/doc-routes.json`과 대조해 그 파일의 입력·출력 형식이나 외부 동작을 정의하는 문서 경로를 출력한다.
 4. 요구사항 ID/Project Goal, 지금 필요한 이유, 산출물 위치를 확인한다.
 5. 파일·데이터·서비스의 실제 상태를 직접 확인하고 작업한다.
 
-Codex의 PreToolUse 훅은 패치 대상 경로를 보고 관련 계약 문서를 다시 알려준다. 이 훅은 맥락을 보강하는 가드레일이며 완전한 강제 경계가 아니다. 최종 강제는 `make check`와 CI의 문서 동기화 검사다.
+`backend/scripts/01_extract_seed.py`를 예로 들면, 라우터는 이 경로를 `source data and ingestion` 규칙과 매칭해 `docs/data/source-and-ingestion.md`를 출력한다. 에이전트는 편집 전에 그 문서에서 허용 원본 필드, 정규화 결과, 결측 행 처리, 중복 정책을 읽고 코드 변경이 이 계약을 바꾸는지 판정한다. 계약이 바뀌면 문서도 수정하고, 바뀌지 않으면 아래의 검토 확인을 남긴다.
+
+Codex의 PreToolUse 훅은 같은 라우팅을 패치 직전에 자동 실행해 문서 경로를 모델 문맥에 넣는다. 훅은 문서를 대신 읽거나 계약 준수를 판정하지 않는다. 최종 판정은 `make check`와 CI의 문서 동기화 검사가 담당한다.
 
 ## 3. 상황별 피드백 루프
 
@@ -46,7 +48,7 @@ Codex의 PreToolUse 훅은 패치 대상 경로를 보고 관련 계약 문서�
 | L2 | 커밋 전 | `make check` → lint·arch·unit·docs | S1 |
 | L3 | PR | GitHub Actions | S1, 통합은 S9 확장 |
 | L4 | 상위 지침 변경 | `make agent-budget` 측정; 목표 기준은 사용자 결정 대기 | S1 |
-| L5 | 계약 코드 변경 | `.harness/doc-routes.json` 기반 동반 변경 검사 | S1 |
+| L5 | 계약 코드 변경 | 계약 문서 동반 변경 또는 파일 해시 기반 변경 없음 확인 | S1 |
 | L6 | 검색 방식 변경 | 같은 입력 집합의 3종 결과 비교 | S3 |
 | L7 | MCP 툴 작성 | Inspector + payload 단위 테스트 | S4 |
 | L8 | 파이프라인 변경 | 인터페이스 확정 후 모의 LLM 단위 테스트 | S5 |
@@ -54,7 +56,11 @@ Codex의 PreToolUse 훅은 패치 대상 경로를 보고 관련 계약 문서�
 | L10 | 계약 코드 편집 시도 | Codex PreToolUse 문서 라우팅 알림 | S1 |
 | L11 | 스키마 변경 | 마이그레이션 재실행·카탈로그 확인 | S2 |
 
-L5와 L10은 짝이다. L10이 쓰기 전에 읽을 문서를 알려주고, L5가 쓴 뒤 계약 문서가 같이 바뀌었는지 검사한다.
+L5와 L10은 짝이다. L10이 편집할 파일과 계약 문서의 연결을 알려주고, L5가 편집 후 검토 결과를 검사한다.
+
+계약이 바뀌면 연결된 문서를 같은 변경에서 수정한다. 문서를 읽고 계약이 바뀌지 않았다고 판단했다면 `make doc-ack REASON='계약이 유지되는 구체적 근거'`를 실행한다. 이 명령은 변경된 파일 경로와 현재 내용의 SHA-256 해시, 판단 근거를 `.harness/doc-review.json`에 기록한다. 이후 파일 내용이 다시 바뀌면 해시가 달라져 이전 확인은 자동으로 무효화된다.
+
+이 확인은 문서 검토를 생략하는 우회 옵션이 아니다. 사유에는 어떤 입력·출력·외부 동작을 대조했고 왜 그대로인지 적는다.
 
 ### 파이프라인 검증
 
@@ -95,7 +101,8 @@ LLM 문장 자체의 골든 파일 대조는 사용하지 않는다. 비결정�
 | 단위·통합 테스트 | `backend/tests/` |
 | 경로 → 문서 원천 | `.harness/doc-routes.json` |
 | 문서 라우팅 | `.harness/route_docs.py` + `.codex/hooks.json` |
-| 문서 동반 변경 | `.harness/check_doc_sync.py` |
+| 문서 변경·검토 판정 | `.harness/check_doc_sync.py` |
+| 계약 변경 없음 근거 | `.harness/doc-review.json` |
 | Markdown 링크 | `.harness/check_markdown_links.py` |
 | 상위 지침 크기 측정 | `.harness/report_agent_budget.py` |
 | 편집 직후 검사 | `.harness/on-edit.sh` + `.codex/hooks.json` |
