@@ -157,10 +157,10 @@ S1 기반 ─┬─ S2 데이터 계층 ─┬─ S4 MCP 서버 ─ S5 생성 �
 - [ ] Qdrant `articles` 컬렉션 생성 (`dense` Cosine + `bm25` sparse, payload 4종)
 - [ ] `scripts/03_build_vectors.py` — 임베딩 적재, 배치·재시도
 - [ ] `infra/qdrant.py`·`infra/embedding.py`
-- [ ] `core/ranking.py` — RRF 결합 (순수 계산)
+- [x] `core/ranking.py` — RRF 결합 (순수 계산, S3-P2)
 - [ ] `app/search.py` — 3종 검색 유스케이스
 - [ ] 기간 필터를 검색 단계에서 적용
-- [ ] `tests/unit/test_ranking.py` — RRF 단위 테스트 (컨테이너 불필요)
+- [x] `tests/unit/test_ranking.py` — RRF 단위 테스트 (컨테이너 불필요, S3-P2)
 
 **완료 기준**
 - 세 방식이 각각 호출 가능하고 결과가 다름
