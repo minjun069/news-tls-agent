@@ -36,7 +36,7 @@
 | 데이터 | 저장소 | 비고 |
 |---|---|---|
 | 원본 JSONL | `data/raw/` | Git 추적 제외. 사용자가 직접 투입 |
-| 시드 JSONL | `data/seed/` | 추출 스크립트 산출물. Git 추적 제외 |
+| 중간 정규화 파일 | 만들지 않음 | 원본은 검증 뒤 MS-SQL에 직접 배치 적재 |
 | 기사·이슈·엔티티·관계 | MS-SQL `newsagent` | |
 | 임베딩 벡터 | Qdrant `articles` 컬렉션 | 컨테이너 볼륨 |
 | 감사 로그 · 실행 로그 | 로그 파일 | 회전 정책 미적용 |
@@ -130,26 +130,42 @@ API 오류 응답의 `reason` 값으로 노출된다. 화면 표기는 [`SCREENS
 ## 3. 파이프라인
 
 ```
-data/raw/*.jsonl                     ← 사용자가 투입
+data/raw/*.jsonl                       ← 사용자가 투입
+      │                    │
+      │                    ├──▶ scripts/01_validate_raw.py
+      │                    │     전체 검증 보고서(JSON 표준 출력)
+      ▼
+scripts/02_load_mssql.py               ← 같은 원본을 재순회해 검증·정규화·배치 upsert
       │
-      ▼  scripts/01_extract_seed.py
-data/seed/*.jsonl                    ← 선정 토픽 기사만 추출
+      ├──▶ MS-SQL (articles)
       │
-      ├──▶ scripts/02_load_mssql.py  ──▶  MS-SQL (articles)
-      │
-      └──▶ scripts/03_build_vectors.py ─▶  Qdrant (articles 컬렉션)
+      └──▶ scripts/03_build_vectors.py ─▶ Qdrant (articles 컬렉션)
 ```
 
 엔티티·관계는 이 파이프라인에 포함되지 않는다. **런타임에 그래프를 조회할 때 추출**한다 (§2.6).
 
-### 3.1 시드 추출
+### 3.1 원본 검증·정규화
 
-- 입력: 원본 JSONL
-- 처리: 선정 토픽의 키워드로 필터 → 적재 제외 기준(§1.2) 적용 → 정규화
-- 출력: 시드 JSONL
-- 정규화 필드: `article_id`, `title`, `sub_title`, `service_date`, `summary`, `content`,
-  `url`, `category_large`, `category_middle`, `category_small`
-- 같은 `article_id`가 여러 번 나오면 마지막 유효 행을 사용하며, 출력은 ID 오름차순이다.
+`scripts/01_validate_raw.py`는 원본 JSONL을 끝까지 읽어 적재 가능 여부만 JSON 한 줄로 보고한다.
+중간 정규화 JSONL이나 토픽별 시드 파일은 만들지 않는다. `02_load_mssql.py`도 같은 정규화 함수를
+사용하므로 검증과 실제 적재의 제외 기준이 다르지 않다.
+
+정규화 필드는 `article_id`, `title`, `sub_title`, `service_date`, `summary`, `content`, `url`,
+`category_large`, `category_middle`, `category_small`이다. 빈 행, JSON 파싱 실패 행, JSON 객체가
+아닌 행은 각각 집계하고 적재하지 않는다. JSON 객체는 아래 순서로 하나의 대표 제외 사유를 부여한다.
+
+| 제외 사유 | 판정 |
+|---|---|
+| `missing_article_id` | `article_id`가 없거나 빈 값 |
+| `invalid_article_id` | `article_id`가 정수 또는 정수 문자열이 아님 |
+| `missing_title` | `article_title`이 비어 있음 |
+| `invalid_service_date` | `article_service_daytime`이 `YYYY-MM-DD HH:MM:SS`로 파싱되지 않음 |
+| `missing_content` | `text`가 비어 있음 |
+| `field_validation_error` | 길이 제한 등 `Article` 도메인 검증 실패 |
+
+검증 보고서는 전체 행 수, 빈 행 수, JSON 오류 수, 객체 오류 수, 유효 기사 수, 유효
+`article_id` 중복 수, 제외 사유별 수를 포함한다. 유효 ID가 중복되면 적재 순서상 마지막 유효 행이
+MS-SQL의 기존 행을 덮어쓴다. 뒤쪽 행이 유효하지 않으면 적재하지 않으므로 앞선 유효 행을 유지한다.
 
 현재 실제 원본은 `data/raw/news.jsonl`이며 178,887행이다. 확인된 주요 매핑은 다음과 같다.
 
@@ -165,49 +181,18 @@ data/seed/*.jsonl                    ← 선정 토픽 기사만 추출
 | `category_middle_nm` | `category_middle` |
 | `category_small_nm` | `category_small` |
 
-현재 추출기는 이 원본 필드명을 아직 받지 못하므로 실제 전처리는 미완료다. 토픽 선정 방식과
-필터 기준을 확정한 뒤 매핑, 표본 검증, 전체 행 검증을 함께 수행한다.
-
-#### 3.1.1 평가 정답 파일
-
-실행 입력과 평가 정답은 아래처럼 분리한다.
-
-- `data/seed/<topic>.articles.jsonl`: 정규화된 후보 기사. 타임라인 생성 LLM에 제공할 수 있다.
-- `data/seed/<topic>.gold.json`: 사람이 실제 기사로 확인한 정답 사건과 검색·평가 기준. 후보
-  추출과 결과 평가에만 사용하며 타임라인 생성 LLM 입력에는 포함하지 않는다.
-
-`gold.json`은 UTF-8 JSON 객체이며 최상위 형식은 다음과 같다.
-
-| 필드 | 형식 | 의미 |
-|---|---|---|
-| `schema_version` | 정수 | 현재 값은 `1` |
-| `topic_id` | 문자열 | 파일명과 대응하는 안정적인 영문 식별자 |
-| `topic` | 문자열 | 평가할 토픽명 |
-| `period` | `{start, end}` | 최초 후보 검색 범위. 날짜는 `YYYY-MM-DD`, 양 끝 포함 |
-| `people` | 문자열 배열 | 토픽 전체의 인물명과 검색 별칭 |
-| `organizations` | 문자열 배열 | 토픽 전체의 기관명과 검색 별칭 |
-| `recall_keywords` | 문자열 배열 | 최초 검색에 OR로 적용할 재현율 중심 검색어 |
-| `expansion_rules` | 객체 배열 | `trigger`, `action`으로 구성한 검색 확장 순서 |
-| `omission_risks` | 객체 배열 | `risk`, `signal`, `expansion`으로 구성한 누락 점검 기준 |
-| `events` | 객체 배열 | 날짜순 정답 사건 목록 |
-
-각 `events` 원소는 `event_id`, `period`, `title`, `summary`, `people`, `organizations`,
-`recall_keywords`, `evidence_articles`를 가진다. `event_id`는 파일 안에서 유일해야 한다.
-`evidence_articles`는 한 건 이상이어야 하며 각 원소는 원본의 `article_id`, 초 단위
-`service_datetime`, `title`, `url`을 그대로 기록한다. 사건 기간과 검색 필드는 후보를 찾는
-평가 준비 자료이고, `evidence_articles`는 정답 사건이 실제 원본에 존재함을 감사하는 자료다.
-
-후보 선별 뒤 `evidence_articles` ID 자체가 검색 결과에 있는지를 묻지 않는다. 커버리지는
-정답 사건마다 **관련 판정을 받은 서로 다른 선별 기사**가 한 건 이상인지로 계산한다. 전체
-사건의 커버리지가 100%가 아니면 해당 `coverage_gap` 사건에 `expansion_rules`를 순서대로
-적용한다. 사건당 서로 다른 기사 두 건 이상은 보조 지표로 기록하되 필수 통과 조건으로 삼지
-않는다. 확장 뒤 새 후보가 없거나 관련 판정 기사가 계속 0건이면 자동으로 사건을 삭제하지
-않고 수동 검토 대상으로 남긴다.
+`2026-09-03` 검증에서 실제 `news.jsonl` 178,887행을 전수 처리해 JSON 오류·비객체·제외·유효
+ID 중복이 모두 0건임을 확인했다. 같은 날 MS-SQL `articles`에는 서로 다른 ID 178,887건이
+저장됐고, 원본 앞·중간·마지막 표본의 정규화 필드가 일치했다. 토픽별 gold, 후보 기사, 관련성
+판정, 커버리지 계산은 검색 로직이 구현된 뒤의 오프라인 평가이며 S2 적재 입력·산출물이 아니다.
 
 ### 3.2 MS-SQL 적재
 
-- `--batch-size` 단위 upsert
-- **멱등성**: 동일 `article_id` 재적재 시 덮어쓴다
+- 입력은 `data/raw/*.jsonl`이며 `scripts/02_load_mssql.py`가 원본을 직접 스트리밍한다.
+- `--batch-size`(기본 200) 단위 upsert. 한 배치 안의 중복 ID는 마지막 유효 기사 한 건으로 합친다.
+- **멱등성**: 동일 `article_id` 재적재 시 마지막 유효 행으로 덮어쓴다.
+- CLI는 §3.1 검증 집계와 DB에 보낸 `upserted_row_count`를 JSON 한 줄로 기록한다. 원본 중복이
+  없으면 두 수는 모두 유효 기사 수와 같다.
 - 스키마는 [`schema.md`](schema.md) 참조
 
 ### 3.3 벡터 적재
@@ -223,7 +208,16 @@ data/seed/*.jsonl                    ← 선정 토픽 기사만 추출
 
 ### 3.4 실행 순서
 
-MS-SQL 적재가 벡터 적재보다 **먼저** 수행되어야 한다. 벡터 검색이 반환한 `article_id`로 원문을 조회하므로, 원문이 없으면 검색 결과를 표시할 수 없다.
+`make migrate` 뒤에 원본 검증과 적재를 순서대로 실행한다.
+
+```bash
+cd backend
+uv run python -m scripts.01_validate_raw ../data/raw/news.jsonl
+uv run python -m scripts.02_load_mssql ../data/raw/news.jsonl --batch-size 200
+```
+
+MS-SQL 적재가 벡터 적재보다 **먼저** 수행되어야 한다. 벡터 검색이 반환한 `article_id`로 원문을
+조회하므로, 원문이 없으면 검색 결과를 표시할 수 없다.
 
 ---
 

@@ -15,7 +15,8 @@
       "name": "source data and ingestion",
       "paths": [
         "backend/core/models.py",
-        "backend/scripts/01_extract_seed.py",
+        "backend/scripts/01_validate_raw.py",
+        "backend/scripts/raw_ingestion.py",
         "backend/scripts/02_load_mssql.py"
       ],
       "docs": ["docs/data/source-and-ingestion.md"]

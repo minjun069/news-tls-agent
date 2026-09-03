@@ -44,8 +44,7 @@ news-tls-agent/
 │  ├─ backend.yml
 │  └─ web.yml                S7에서 추가
 ├─ data/
-│  ├─ raw/                   원본 JSONL, Git 제외, 사용자 투입
-│  └─ seed/                  전처리 산출물, Git 제외
+│  └─ raw/                   원본 JSONL, Git 제외, 사용자 투입
 ├─ docs/
 │  ├─ INDEX.md               전체 문서 목차와 단일 원천
 │  ├─ REQUIREMENTS.md        문제·목표·범위·사용자·기능 목차
@@ -101,7 +100,7 @@ news-tls-agent/
 │  │  ├─ server.py
 │  │  └─ tools/
 │  ├─ db/                    migrate.py·migrate.sh·schema.sql·migrations/
-│  ├─ scripts/               01_extract_seed·02_load_mssql·03_build_vectors
+│  ├─ scripts/               01_validate_raw·02_load_mssql·03_build_vectors
 │  └─ tests/
 │     ├─ unit/               컨테이너 불필요
 │     └─ integration/        MS-SQL·Qdrant 필요
