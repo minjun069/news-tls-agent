@@ -105,6 +105,7 @@ ADR-0003에서 제외한 검색기별 가중치와 `k` 튜닝은 추가하지 �
 |---|---|
 | 관련 | NFR-04, NFR-05 |
 | 산출물 | `backend/infra/qdrant.py`, `backend/infra/embedding.py`, 단위 테스트, 의존성·설정 |
+| 상태 | 완료 — Qdrant 1.19.x·Google Gen AI 어댑터와 모의 SDK 검증 반영 |
 | 권장 모델 | `gpt-5.6-terra` |
 | 추론 수준 | `high` |
 
