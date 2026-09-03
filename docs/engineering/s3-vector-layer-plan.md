@@ -84,6 +84,7 @@ BM25는 [ADR-0005](../decisions/0005-qdrant-dense-sparse-search.md)에 따라 Qd
 |---|---|
 | 관련 | NFR-04, ADR-0003 |
 | 산출물 | `backend/core/ranking.py`, `backend/tests/unit/test_ranking.py` |
+| 상태 | 완료 — 결정론적 RRF와 경계·중복·불변성 단위 테스트 반영 |
 | 권장 모델 | `gpt-5.6-terra` |
 | 추론 수준 | `medium` |
 

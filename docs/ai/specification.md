@@ -294,7 +294,9 @@ score(d) = Σ  1 / (k + rank_i(d))
 ```
 
 `k=60`, 각 검색 목록의 순위는 1부터 시작한다. RRF 점수가 같으면 `article_id` 오름차순으로
-정렬한다. Qdrant의 내장 fusion을 쓰지 않고 `core.ranking`의 순수 함수로 계산한다.
+정렬한다. 같은 검색 목록에 기사 ID가 중복되면 첫 순위만 점수에 반영한다. `top_k`는 1 이상,
+`k`는 0 이상만 허용한다. Qdrant의 내장 fusion을 쓰지 않고 `core.ranking`의 순수 함수로
+계산한다.
 
 관련 결정: [ADR-0003](../decisions/0003-search-strategies.md),
 [ADR-0005](../decisions/0005-qdrant-dense-sparse-search.md)
