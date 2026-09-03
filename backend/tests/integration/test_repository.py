@@ -167,6 +167,11 @@ def test_three_level_join_reverse_lookup_and_ranking(context: RepositoryContext)
     requested = repository.get_articles([ids[2], 0, ids[0], ids[2]])
     assert [saved.article_id for saved in requested] == [ids[2], ids[0]]
 
+    summaries = repository.list_issues()
+    summary = next(item for item in summaries if item.issue_id == issue_id)
+    assert summary.topic == issue.topic
+    assert summary.event_count == 1
+
 
 def test_failed_article_link_rolls_back_whole_issue(context: RepositoryContext) -> None:
     repository = context.repository

@@ -27,9 +27,9 @@
                 │ MCP (stdio)
                 ▼
 ┌──────────────────────────────────────────────┐
-│  mcp_server/   FastMCP                        │
+│  mcp_server/   MCPServer (Python SDK v2)      │
 │    search_articles · read_article             │
-│    list_issues · get_issue                    │
+│    list_issues · get_issue · export_briefing  │
 │    ※ LLM 호출 없음. 데이터 접근 계약 + 감사점  │
 └──────┬─────────────────────────┬─────────────┘
        ▼                         ▼
@@ -81,7 +81,7 @@
 | AI | Google Gemini (`gemini-2.5-flash`) | 보유 키 기준 |
 | Embedding | Google `text-embedding-004` | 차원수는 착수 시 확인 |
 | Agent | LangGraph `create_react_agent` | |
-| MCP | `mcp` (FastMCP) + `langchain-mcp-adapters` | stdio 전송 |
+| MCP | `mcp` v2 (`MCPServer`) + `langchain-mcp-adapters` | stdio 전송 |
 | PDF 생성 | 미정 | EXP-001 |
 | Notion 연동 | `notion-client` | EXP-002 |
 | 그래프 시각화 | 미정 (프론트 라이브러리) | GRPH-001 |

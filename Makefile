@@ -69,7 +69,7 @@ migrate:
 	bash $(BE)/db/migrate.sh
 
 mcp-inspect:
-	cd $(BE) && npx @modelcontextprotocol/inspector uv run python mcp_server/server.py
+	npx @modelcontextprotocol/inspector@2.5.0 --cli --config .mcp.json --server news-tls-agent --method tools/list --strict
 
 web-check:
 	cd web && npx vue-tsc --noEmit && npm run build

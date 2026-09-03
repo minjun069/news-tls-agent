@@ -1,4 +1,25 @@
 {
   "version": 1,
-  "reviews": {}
+  "reviews": {
+    "AI pipeline and retrieval": {
+      "files": {
+        "backend/app/search.py": "e91fa58879ca433376e736e622655ef95b759f2ca90c80fef8548f254c5803e6",
+        "backend/core/models.py": "7668171c542c41bc3099744fd213c3188444336e3b0691969a15a75d93a30a6e",
+        "backend/core/ports.py": "fa44b5c1b369fbd32ba010c9f35a4f7d516534f54237f4e8cff655416ae049f5"
+      },
+      "reason": "SqlRepository.list_issues는 schema.md §4.2의 기존 이슈 목록 질의를 구현하고, IssueSummary와 app/search.py는 source-and-ingestion.md의 적재 형식 및 ai/specification.md §4의 keyword·semantic·RRF 입력·출력 계약을 변경하지 않는다."
+    },
+    "MS-SQL schema and repository": {
+      "files": {
+        "backend/infra/repository.py": "11f177f12611e0d75312d3f19e0a2d7f26d9aee0777dbca64780ecfb3ec208e3"
+      },
+      "reason": "SqlRepository.list_issues는 schema.md §4.2의 기존 이슈 목록 질의를 구현하고, IssueSummary와 app/search.py는 source-and-ingestion.md의 적재 형식 및 ai/specification.md §4의 keyword·semantic·RRF 입력·출력 계약을 변경하지 않는다."
+    },
+    "source data and ingestion": {
+      "files": {
+        "backend/core/models.py": "7668171c542c41bc3099744fd213c3188444336e3b0691969a15a75d93a30a6e"
+      },
+      "reason": "SqlRepository.list_issues는 schema.md §4.2의 기존 이슈 목록 질의를 구현하고, IssueSummary와 app/search.py는 source-and-ingestion.md의 적재 형식 및 ai/specification.md §4의 keyword·semantic·RRF 입력·출력 계약을 변경하지 않는다."
+    }
+  }
 }

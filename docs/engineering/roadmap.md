@@ -158,7 +158,7 @@ S1 기반 ─┬─ S2 데이터 계층 ─┬─ S4 MCP 서버 ─ S5 생성 �
 - [ ] `scripts/03_build_vectors.py` — 임베딩 적재, 배치·재시도
 - [x] `infra/qdrant.py`·`infra/embedding.py` — 모의 SDK 단위 검증 (S3-P3)
 - [x] `core/ranking.py` — RRF 결합 (순수 계산, S3-P2)
-- [ ] `app/search.py` — 3종 검색 유스케이스
+- [x] `app/search.py` — 3종 검색 유스케이스
 - [x] 기간 필터를 검색 단계에서 적용하는 요청 구현·모의 검증 (S3-P3)
 - [x] `tests/unit/test_ranking.py` — RRF 단위 테스트 (컨테이너 불필요, S3-P2)
 
@@ -173,13 +173,13 @@ S1 기반 ─┬─ S2 데이터 계층 ─┬─ S4 MCP 서버 ─ S5 생성 �
 | 관련 | CHAT-002, NFR-06, NFR-12, EX-06, ADR-0001 |
 |---|---|
 
-- [ ] `mcp_server/server.py`·`mcp_server/tools/` — FastMCP
-- [ ] 툴 5종 + **description 문구** ([`MCP_TOOLS.md`](../contracts/mcp-tools.md) §7 작성 규칙)
-- [ ] 응답 규약 `{ok, ...}` / `{ok:false, error:{code,message}}` ([`MCP_TOOLS.md`](../contracts/mcp-tools.md))
-- [ ] 감사 로그
-- [ ] payload 함수와 데코레이터 분리
-- [ ] `tests/unit/test_mcp_payloads.py` — payload 함수 (MCP 없이)
-- [ ] `.mcp.json` — 자기 MCP 서버를 개발 환경에 등록
+- [x] `mcp_server/server.py`·`mcp_server/tools/` — Python MCP SDK v2 `MCPServer`
+- [x] 툴 5종 + **description 문구** ([`MCP_TOOLS.md`](../contracts/mcp-tools.md) §7 작성 규칙)
+- [x] 응답 규약 `{ok, ...}` / `{ok:false, error:{code,message}}` ([`MCP_TOOLS.md`](../contracts/mcp-tools.md))
+- [x] 감사 로그
+- [x] payload 함수와 데코레이터 분리
+- [x] `tests/unit/test_mcp_payloads.py` — payload 함수 (MCP 없이)
+- [x] `.mcp.json` — 자기 MCP 서버를 개발 환경에 등록
 
 **완료 기준**
 - MCP Inspector에서 툴 5종 모두 정상 응답
@@ -189,6 +189,9 @@ S1 기반 ─┬─ S2 데이터 계층 ─┬─ S4 MCP 서버 ─ S5 생성 �
 ```bash
 make mcp-inspect
 ```
+
+`export_briefing`은 S4에서 툴 계약과 주입 포트까지만 제공한다. S8 구현이 주입되기 전에는
+`EXPORT_NOT_CONFIGURED` 구조화 오류를 반환하며 PDF·Notion 파일을 임시 생성하지 않는다.
 
 ---
 

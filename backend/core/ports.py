@@ -13,6 +13,7 @@ from core.models import (
     IssueCitation,
     IssueCreate,
     IssueDetail,
+    IssueSummary,
     KeywordQuery,
     SearchHit,
     SearchOptions,
@@ -73,6 +74,10 @@ class Repository(Protocol):
 
     def get_issue(self, issue_id: int) -> IssueDetail | None:
         """이슈 상세와 이벤트별 대표 기사를 조회한다."""
+        ...
+
+    def list_issues(self) -> list[IssueSummary]:
+        """생성 시각 내림차순으로 이슈 목록과 이벤트 수를 반환한다."""
         ...
 
     def find_issue_by_topic(self, topic: str) -> IssueDetail | None:

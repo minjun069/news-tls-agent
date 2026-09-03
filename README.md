@@ -22,6 +22,16 @@ MS-SQL (기사·이슈)   Qdrant (임베딩)
 
 **에이전트는 저장소에 직접 접근하지 않는다.** 모든 데이터 접근은 MCP 서버를 경유한다 ([ADR-0001](docs/decisions/0001-mcp-data-access.md)).
 
+MCP 서버는 프로젝트 루트의 `.env`를 읽어 stdio로 실행된다. `.mcp.json`이 같은 명령을 개발
+도구에 등록하며, 아래 명령으로 다섯 툴의 스키마를 MCP Inspector에서 확인한다.
+
+```bash
+make mcp-inspect
+```
+
+Inspector 2.5.0은 Node.js 22.19 이상이 필요하다. WSL에서는 Windows의 `npx`가 아니라 WSL에
+설치한 Linux용 `node`·`npx`가 `PATH`에 있어야 한다.
+
 ## 실행 모드
 
 | 모드 | 앱 | 저장소 | 용도 |
@@ -81,4 +91,5 @@ make test-all   # 통합 포함
 
 ## 진행 상황
 
-[`docs/engineering/roadmap.md`](docs/engineering/roadmap.md) — 현재 **S2 데이터 계층**.
+[`docs/engineering/roadmap.md`](docs/engineering/roadmap.md) — **S4 MCP 서버 인터페이스 구현 완료**.
+실데이터 성공 경로는 S2 원본 적재와 S3 Qdrant 컬렉션 적재 완료 후 사용할 수 있다.
