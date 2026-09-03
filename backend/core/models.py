@@ -170,6 +170,16 @@ class IssueDetail(DomainModel):
     events: tuple[IssueEvent, ...]
 
 
+class IssueSummary(DomainModel):
+    """목록 조회에 필요한 이슈 요약과 이벤트 수."""
+
+    issue_id: int
+    topic: str
+    title: str | None
+    generated_at: datetime
+    event_count: int = Field(ge=0)
+
+
 class IssueCitation(DomainModel):
     issue_id: int
     topic: str

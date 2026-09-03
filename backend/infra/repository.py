@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from core.models import (
@@ -14,6 +14,7 @@ from core.models import (
     IssueCreate,
     IssueDetail,
     IssueEvent,
+    IssueSummary,
 )
 from core.ranking import choose_representative
 from infra.entities import (
@@ -136,6 +137,32 @@ class SqlRepository:
         with self._session_factory() as session:
             issue_row = session.get(IssueRow, issue_id)
             return self._build_issue(session, issue_row) if issue_row is not None else None
+
+    def list_issues(self) -> list[IssueSummary]:
+        statement = (
+            select(IssueRow, func.count(IssueEventRow.event_id))
+            .outerjoin(IssueEventRow, IssueEventRow.issue_id == IssueRow.issue_id)
+            .group_by(
+                IssueRow.issue_id,
+                IssueRow.topic,
+                IssueRow.title,
+                IssueRow.summary,
+                IssueRow.generated_at,
+            )
+            .order_by(IssueRow.generated_at.desc(), IssueRow.issue_id.desc())
+        )
+        with self._session_factory() as session:
+            rows = session.execute(statement).all()
+        return [
+            IssueSummary(
+                issue_id=issue_row.issue_id,
+                topic=issue_row.topic,
+                title=issue_row.title,
+                generated_at=issue_row.generated_at,
+                event_count=event_count,
+            )
+            for issue_row, event_count in rows
+        ]
 
     def find_issue_by_topic(self, topic: str) -> IssueDetail | None:
         with self._session_factory() as session:
