@@ -14,7 +14,7 @@ AI 기능은 둘이다. **타임라인 생성 파이프라인**(LLM 호출 9종)
 |---|---|---|
 | 파이프라인 전 단계 | `gemini-2.5-flash` | 긴 입력(기사 다수)을 처리해야 하고 호출이 잦다 |
 | 질의 에이전트 | `gemini-2.5-flash` | 도구 호출 지원. 단일 provider로 설정 단순화 |
-| 임베딩 | `text-embedding-004` | API 호출이라 GPU 불필요 |
+| 임베딩 | `text-embedding-004` | `google-genai`, API 호출이라 GPU 불필요 |
 
 > provider가 Google로 고정된 것은 보유 API 키에 따른 **제약**이다. 기술적 우위 판단이 아니다.
 
@@ -269,8 +269,14 @@ CONTENT: {본문}
 | BM25 텍스트 처리 | multilingual tokenizer, stemmer 없음, stopwords 없음 |
 | payload | `article_id`, `service_date`, `title`, `category_middle` |
 
+로컬 Qdrant 서버와 Python client는 `1.19.x`로 맞춘다. Docker 이미지는 `v1.19.0`으로
+고정하고 `uv.lock`이 `qdrant-client`의 실제 해석 버전을 고정한다. 기존 컬렉션이 요청한 dense
+차원·Cosine 거리·BM25 IDF 구성과 다르면 재생성하지 않고 구성 오류를 반환한다.
+
 `title + summary + content` 결합 문자열은 dense와 BM25 vector 생성에 모두 쓰지만 payload에는
 저장하지 않는다. dense 임베딩이 실패한 기사도 `bm25`만 적재해 키워드 검색 대상으로 남긴다.
+Gemini 호출은 문서 배치에 `RETRIEVAL_DOCUMENT`, 검색 질의에 `RETRIEVAL_QUERY` task type을
+사용한다. API 오류와 Qdrant SDK 오류는 어댑터에서 삼키지 않아 상위 호출자가 재시도를 결정한다.
 
 payload에 `service_date`를 두는 이유는 **기간 필터를 검색 단계에서 적용**하기 위함이다
 (NFR-05). 키워드와 의미 검색 모두 Qdrant query filter로 기간을 먼저 제한한 뒤 `top_k`를
@@ -281,6 +287,8 @@ payload에 `service_date`를 두는 이유는 **기간 필터를 검색 단계�
 P3가 만든 키워드 묶음과 `OR`·`AND` 연산자를 `KeywordQuery`로 전달한다. Qdrant 어댑터는
 각 term을 같은 기간 필터로 BM25 검색하고, OR은 기사 ID 합집합, AND는 교집합으로 결합한다.
 같은 기사에 대한 term별 BM25 점수는 합산하며 집합 결합 뒤 최종 `top_k`를 적용한다.
+이를 위해 어댑터는 기간 필터가 적용된 포인트 수를 exact count로 구하고 각 term 검색의 후보
+한도로 사용한다. 합산 점수가 같으면 `article_id` 오름차순으로 정렬한다.
 
 BM25 ingest와 query는 같은 multilingual tokenizer 설정을 사용한다. 기본 영어 stemming과
 stopword 제거는 한국어 기사에 적용하지 않는다.

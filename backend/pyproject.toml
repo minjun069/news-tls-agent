@@ -8,6 +8,8 @@ dependencies = [
     "pyodbc>=5.2",
     "python-dotenv>=1.0",
     "pydantic>=2.0",
+    "qdrant-client>=1.19,<1.20",
+    "google-genai>=1,<2",
 ]
 
 [dependency-groups]

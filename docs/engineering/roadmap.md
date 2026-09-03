@@ -156,10 +156,10 @@ S1 기반 ─┬─ S2 데이터 계층 ─┬─ S4 MCP 서버 ─ S5 생성 �
 - [x] `core/models.py`·`core/ports.py` — 검색 계약과 BM25 구현 위치 결정 (S3-P1)
 - [ ] Qdrant `articles` 컬렉션 생성 (`dense` Cosine + `bm25` sparse, payload 4종)
 - [ ] `scripts/03_build_vectors.py` — 임베딩 적재, 배치·재시도
-- [ ] `infra/qdrant.py`·`infra/embedding.py`
+- [x] `infra/qdrant.py`·`infra/embedding.py` — 모의 SDK 단위 검증 (S3-P3)
 - [x] `core/ranking.py` — RRF 결합 (순수 계산, S3-P2)
 - [ ] `app/search.py` — 3종 검색 유스케이스
-- [ ] 기간 필터를 검색 단계에서 적용
+- [x] 기간 필터를 검색 단계에서 적용하는 요청 구현·모의 검증 (S3-P3)
 - [x] `tests/unit/test_ranking.py` — RRF 단위 테스트 (컨테이너 불필요, S3-P2)
 
 **완료 기준**
