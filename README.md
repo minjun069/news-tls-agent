@@ -61,8 +61,8 @@ WSL 개발에서는 `MSSQL_HOST`를 비워두면 실행 시 Windows 호스트 �
 
 ```bash
 cd backend
-uv run python scripts/01_extract_seed.py
-uv run python scripts/02_load_mssql.py
+uv run python -m scripts.01_validate_raw ../data/raw/news.jsonl
+uv run python -m scripts.02_load_mssql ../data/raw/news.jsonl --batch-size 200
 uv run python scripts/03_build_vectors.py
 ```
 

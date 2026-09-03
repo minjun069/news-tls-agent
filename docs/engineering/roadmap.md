@@ -15,62 +15,19 @@ S1 기반 ─┬─ S2 데이터 계층 ─┬─ S4 MCP 서버 ─ S5 생성 �
 
 ---
 
-## 현재 작업 인수인계 — S2 전처리 착수 전
+## 현재 작업 인수인계 — S2 전체 원본 적재
 
-### 작업 트리
+`data/raw/news.jsonl`은 178,887행이며, 전수 파싱에서 JSON 오류·비객체·필수 필드 제외·유효
+`article_id` 중복은 모두 0건이었다. 기사 시각 범위는 `2025-01-01 00:12:54`부터
+`2025-12-31 23:59:10`까지다.
 
-현재 브랜치는 `feat/s2-data-layer`, HEAD는 `3679944 chore(harness): 문서 변경 없음 검토와 CI 게이트 통일`이다. 하네스 변경은 커밋됐으며, 아래는 S2 전처리 구현을 시작하기 전에 확정한 실제 원본·평가 계약과 작업 상태다.
+S2의 운영 경로는 토픽별 후보를 만들지 않는다. `01_validate_raw.py`가 전체 원본의 정규화 가능
+여부를 보고하고, `02_load_mssql.py`가 같은 원본을 직접 MS-SQL에 적재한다. 토픽 gold, 검색
+커버리지, 검색어 확장, LLM 관련성 판정은 S3 검색 기능이 생긴 뒤의 오프라인 평가로 미룬다.
 
-### 문서 라우팅의 정확한 역할
-
-`.harness/doc-routes.json`은 **편집할 코드 경로를 그 코드의 입력·출력·외부 동작을 정의한 문서 경로로 연결하는 역조회 표**다. 예를 들어 `backend/scripts/01_extract_seed.py`를 입력하면 `route_docs.py`가 `docs/data/source-and-ingestion.md`를 출력한다. 에이전트는 편집 전에 그 문서의 원본 필드, 정규화 출력, 제외 조건, 중복 정책을 읽고 코드 변경이 문서 내용까지 바꾸는지 판정한다.
-
-이 라우팅은 `AGENTS.md`의 작업 종류별 문서 흐름을 대체하지 않는다. 작업 흐름은 전처리 작업 전체에 필요한 타임라인 요구사항·수집 문서·스키마를 정하고, 라우팅은 실제 편집 파일이 정해진 시점에 빠뜨리기 쉬운 파일별 문서를 다시 특정한다.
-
-### 확인한 원본과 선정 토픽
-
-`data/raw/news.jsonl`을 전수 파싱한 결과는 178,887행, JSON 파싱 실패 0행, 기사 시각 범위 `2025-01-01 00:12:54`부터 `2025-12-31 23:59:10`까지다. `/home/ssafy` 4단계 범위와 현재 Git 이력에서는 별도의 과거 정답 타임라인·토픽 파일을 찾지 못했다. 따라서 아래 토픽은 실제 원본 제목 빈도와 사건 경계의 명확성, 도메인 다양성을 근거로 선정했다.
-
-| 토픽 | 초기 기간 | 재현율 중심 검색어 | 선정 근거 |
-|---|---|---|---|
-| 윤석열 대통령 탄핵심판과 파면 | 2025-01-01~2025-04-04 | `탄핵`, `윤석열`, `계엄`, `헌법재판소`, `체포`, `파면` | 제목에 `탄핵` 927건, `계엄` 625건이 있어 다단계 정치 사건의 커버리지를 시험할 수 있다. |
-| 2025년 영남권 대형 산불 | 2025-03-21~2025-04-05 | `영남 산불`, `의성 산불`, `경북 산불`, `산림청`, `특별재난지역`, 지역명 조합 | 발화·확산·대피·진화·복구로 사건 단계가 분명하다. 일반 `산불` 757건에는 LA 등 다른 사건이 섞이므로 지역·기간 조건이 필수다. |
-| SK텔레콤 유심 정보 유출 사태 | 2025-04-18~2025-07-31 | `SK텔레콤`, `SKT`, `유심`, `해킹`, `개인정보 유출`, `유심보호서비스`, `위약금` | 제목에 `SKT` 318건, `유심` 129건이 있으며 사고 공개·정부 조사·교체 대책·보상으로 이어져 기업 보안 사건을 시험할 수 있다. |
-
-빈도는 제목의 단순 부분 문자열 집계이며 최종 관련 기사 수가 아니다. 초기 기간은 정답 사건을 작성하면서 앞뒤로 확장할 수 있다. 다른 토픽을 다시 승인받지 않고 이 세 토픽으로 진행하되, 사용자가 변경을 요청하면 그때 범위를 바꾼다.
-
-### 평가 정의
-
-- **정답 타임라인**은 기사 후보 검색어·기간을 만들고 결과를 평가하는 데만 사용한다. 타임라인 생성 LLM 입력에는 사건명·설명·정답 기사 ID를 넣지 않는다.
-- **커버리지 통과 조건**은 `정답 사건 중 관련 판정을 받은 서로 다른 선별 기사 ≥ 1건인 사건의 비율 = 100%`다. 미충족 사건이 있으면 검색어·인물·기관·기간을 확장하고 다시 선별한다.
-- 사건마다 서로 다른 기사 2건 이상은 단일 기사 오류에 덜 의존하기 위한 증거 중복 목표였지만 현재 요구사항의 필수 조건은 아니다. 하드 게이트에서 제외하고 `2건 이상 확보 사건 비율`이라는 보조 지표로만 기록한다.
-- `source_gap`이라는 이름은 출판사 다양성 부족인지 기사 부재인지 모호하므로 사용하지 않는다. 정답 사건에 관련 선별 기사가 0건인 상태는 `coverage_gap`으로 기록하고, 출판사 다양성이 필요해지면 별도 `publisher_gap`으로 정의한다.
-- 서로 다른 기사는 `article_id`가 다른 기사를 뜻한다. 서로 다른 언론사를 뜻하지 않는다.
-
-### 전처리 구현 순서와 산출물
-
-1. [x] 위 세 토픽의 정답 사건, 기간, 인물, 기관, 검색어를 작성한다.
-2. [ ] 실제 `news.jsonl` 필드에 맞춘 정규화 어댑터와 전체 행 검증을 구현한다.
-3. [ ] 사건명·인물·기관·검색어·기간으로 재현율 중심 후보 기사를 추출한다.
-4. [ ] 후보를 배치 단위로 LLM에 전달해 관련성을 판정하고 판정 근거를 남긴다.
-5. [ ] 사건별 커버리지를 계산해 `coverage_gap`이 없어질 때까지 검색 조건을 확장한다.
-6. [x] 실행 입력은 `data/seed/<topic>.articles.jsonl`, 평가 정답은 `data/seed/<topic>.gold.json`으로 분리한다. 두 파일은 모두 Git 제외 대상이며 생성 LLM에는 articles 파일만 제공한다.
-
-정답 파일은 `yoon-impeachment.gold.json`, `yeongnam-wildfires.gold.json`,
-`skt-usim-breach.gold.json`으로 작성했다. 각 파일은 정답 사건 9개와 사건당 실제 원본 기사
-2건, 누락 위험, 단계별 검색어 확장 기준을 포함한다. 형식과 생성 LLM 격리 규칙은
-[`source-and-ingestion.md`](../data/source-and-ingestion.md#311-평가-정답-파일)를 따른다.
-
-`backend/scripts/01_extract_seed.py` 구현 전에 `docs/requirements/timeline.md` → `docs/data/source-and-ingestion.md` → `docs/data/schema.md`를 읽고, `python3 .harness/route_docs.py backend/scripts/01_extract_seed.py`가 출력한 수집 문서도 다시 대조한다.
-
-### 검증 상태와 GUI·WSL 주의사항
-
-- 훅 입력에 `backend/scripts/01_extract_seed.py` 패치를 넣었을 때 `hookSpecificOutput.hookEventName=PreToolUse`와 `docs/data/source-and-ingestion.md`가 포함된 `additionalContext`를 확인했다.
-- 새 문서 검토 테스트 3개와 기존 단위 테스트를 합쳐 `uv run pytest -s tests/unit`에서 `10 passed`를 확인했다.
-- ruff 린트·포맷, import-linter 계약 5개, 문서 동기화, Markdown 링크 검사는 각각 통과했다.
-- Codex GUI가 기본 작업 경로를 Windows 앱 경로와 WSL UNC 경로를 합친 잘못된 문자열로 잡았다. 명령마다 `workdir=/home/ssafy/news-tls-agent`를 명시하면 WSL 실행과 읽기는 정상이다.
-- 현재 GUI 샌드박스는 실제 WSL 저장소를 읽기 전용으로 분류해 일반 쓰기에서 `Read-only file system`을 반환한다. 저장소 편집은 승인된 WSL 실행이 필요했다.
-- 표준 `make check`는 pytest 캡처 종료 중 `FileNotFoundError`가 발생해 한 번에 끝나지 않았다. 정확한 실패 위치는 `_pytest/capture.py`의 `self.tmpfile.truncate()`이며, 캡처를 끈 `pytest -s`에서는 전체 10개가 통과했다. CI의 일반 Ubuntu 환경에서 `make check`가 통과하는지는 아직 미검증이다.
+문서 라우팅은 작업 흐름을 대체하지 않는다. 예를 들어 `backend/scripts/01_validate_raw.py`와
+`backend/scripts/02_load_mssql.py`를 바꾸기 전에는 `docs/data/source-and-ingestion.md`를 읽고,
+`python3 .harness/route_docs.py <경로>`의 결과를 대조한다.
 
 ---
 
@@ -123,25 +80,26 @@ S1 기반 ─┬─ S2 데이터 계층 ─┬─ S4 MCP 서버 ─ S5 생성 �
 - [x] `backend/db/migrations/` — [`schema.md`](../data/schema.md) 기준. 테이블 6개, 인덱스 7종
 - [x] `backend/db/migrate.sh` — 미적용 번호만 실행, 스크립트당 트랜잭션
 - [x] `000_bootstrap.sql` — 멱등. `CREATE DATABASE ... COLLATE` + `schema_migrations`
-- [ ] `scripts/01_extract_seed.py` — 실제 `news.jsonl` 필드 매핑·전체 표본 검증 필요
-- [x] `scripts/02_load_mssql.py` — 정규화된 시드의 배치 upsert, 멱등성
+- [x] `scripts/01_validate_raw.py`·`scripts/raw_ingestion.py` — 실제 `news.jsonl` 필드 매핑·전체 검증·제외 사유 집계·유효 ID 중복 처리
+- [x] `scripts/02_load_mssql.py` — 중간 시드 없이 원본 전체를 배치 upsert, 멱등성
 - [x] `core/models.py`·`core/ports.py` — 데이터 모델과 Repository Protocol
 - [x] `infra/db.py`·`infra/entities.py` — 엔진, 세션, ORM
 - [x] `infra/repository.py` — ports 구현
 - [x] `core/ranking.py` — [대표 기사 선정 정책](../requirements/issue-view.md#대표-기사-선정-정책)의 순수 함수
 - [x] `tests/unit/test_ranking.py` · `tests/integration/test_repository.py`
 
-> `data/raw/news.jsonl`은 실제로 존재하지만 원본 필드명(`article_title`, `article_service_daytime`, `text` 등)이 현재 추출기 입력과 다르다. 매핑과 실제 표본 검증 전에는 전처리 완료로 표시하지 않는다.
+> `data/raw/news.jsonl`은 실제 원본 필드명(`article_title`, `article_service_daytime`, `text` 등)을
+> 그대로 유지한다. `01_validate_raw.py`와 `02_load_mssql.py`가 같은 정규화 규칙을 공유하며,
+> 토픽별 seed 파일을 만들지 않는다.
 
 **완료 기준**
 - [x] 이슈 → 이벤트 → 기사 3단 조인 질의 동작
 - [x] **역방향 조회**("기사 X가 인용된 이슈") 동작
 - [x] 대표 기사 선정이 결정론적 (같은 입력 → 같은 결과)
-- [ ] 실제 시드 적재 후 SSMS 실행계획에서 인덱스 사용 확인
+- [x] 실제 원본 전체 적재 뒤 행 수·기간 인덱스 사용 확인; Repository 통합 테스트로 재실행 멱등성 확인
 - [x] 저장 중 외래키 예외 발생 시 부분 데이터 잔존 없음
 
-> `data/raw/news.jsonl` 투입, 시드 토픽 3개 선정, 토픽별 정답 사건 작성은 완료됐다. 다음
-> 작업은 실제 원본 필드 매핑을 적용한 정규화 어댑터와 전처리 검증 구현이다.
+> S2가 완료되면 토픽 후보·gold 커버리지·검색어 확장은 S3 검색 구현의 오프라인 평가로 진행한다.
 
 ---
 

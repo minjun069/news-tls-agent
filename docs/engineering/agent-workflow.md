@@ -36,7 +36,7 @@ Git은 파일의 추적 여부와 이력을 알려줄 뿐, 실제 파일·데이
 4. 요구사항 ID/Project Goal, 지금 필요한 이유, 산출물 위치를 확인한다.
 5. 파일·데이터·서비스의 실제 상태를 직접 확인하고 작업한다.
 
-`backend/scripts/01_extract_seed.py`를 예로 들면, 라우터는 이 경로를 `source data and ingestion` 규칙과 매칭해 `docs/data/source-and-ingestion.md`를 출력한다. 검색 입력·결과 모델과 포트인 `backend/core/models.py`, `backend/core/ports.py`, 순위 결합 함수인 `backend/core/ranking.py`는 `AI pipeline and retrieval` 규칙에도 매칭되어 `docs/ai/specification.md`를 함께 출력한다. 에이전트는 편집 전에 출력된 문서에서 입력·출력·정책을 읽고 코드 변경이 이 계약을 바꾸는지 판정한다. 계약이 바뀌면 문서도 수정하고, 바뀌지 않으면 아래의 검토 확인을 남긴다.
+`backend/scripts/01_validate_raw.py`를 예로 들면, 라우터는 이 경로를 `source data and ingestion` 규칙과 매칭해 `docs/data/source-and-ingestion.md`를 출력한다. 검색 입력·결과 모델과 포트인 `backend/core/models.py`, `backend/core/ports.py`, 순위 결합 함수인 `backend/core/ranking.py`는 `AI pipeline and retrieval` 규칙에도 매칭되어 `docs/ai/specification.md`를 함께 출력한다. 에이전트는 편집 전에 출력된 문서에서 허용 원본 필드, 정규화 결과, 결측 행 처리, 중복 정책을 읽고 코드 변경이 이 계약을 바꾸는지 판정한다. 계약이 바뀌면 문서도 수정하고, 바뀌지 않으면 아래의 검토 확인을 남긴다.
 
 Codex의 PreToolUse 훅은 같은 라우팅을 패치 직전에 자동 실행해 문서 경로를 모델 문맥에 넣는다. 훅은 문서를 대신 읽거나 계약 준수를 판정하지 않는다. 최종 판정은 `make check`와 CI의 문서 동기화 검사가 담당한다.
 
