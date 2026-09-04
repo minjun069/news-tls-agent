@@ -62,11 +62,13 @@ docker compose --profile full up -d
 
 ```bash
 make install              # .venv 생성 (uv)
+make web-install          # web/node_modules 생성 (Node.js 22.19 이상)
 cp .env.example .env
 docker compose up -d      # qdrant만
 make migrate              # 미적용 마이그레이션 실행
 make check                # 린트 · 계층 규칙 · 단위 테스트
 make api                  # FastAPI 개발 서버
+make web                  # Vue 개발 서버 (http://localhost:5173)
 ```
 
 MS-SQL은 네이티브로 설치한다 ([ADR-0002](docs/decisions/0002-mssql-native-qdrant-container.md)).
@@ -101,6 +103,7 @@ uv run python -m scripts.04_generate_timeline "탄핵" \
 
 ```bash
 make check      # 커밋 전 게이트
+make web-check  # Vue 타입 검사 · 프로덕션 빌드
 make arch       # 계층 규칙만
 make test-all   # 통합 포함
 ```
@@ -110,5 +113,5 @@ make test-all   # 통합 포함
 
 ## 진행 상황
 
-[`docs/engineering/roadmap.md`](docs/engineering/roadmap.md) — **S6 API 서버 코드 구현 완료**.
+[`docs/engineering/roadmap.md`](docs/engineering/roadmap.md) — **S7 프론트엔드 구현 완료**.
 실데이터 성공 경로는 `.env` 설정과 S2 원본 적재·S3 Qdrant 컬렉션 적재 완료 후 사용할 수 있다.

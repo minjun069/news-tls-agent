@@ -2,8 +2,10 @@
 # 상세: docs/engineering/validation.md
 
 BE := backend
+WEB := web
+NPM ?= npm
 
-.PHONY: help install check fmt lint arch test test-all doc-sync doc-ack docs-for agent-budget up up-full down migrate mcp-inspect api web-check
+.PHONY: help install web-install check fmt lint arch test test-all doc-sync doc-ack docs-for agent-budget up up-full down migrate mcp-inspect api web web-check
 
 help:
 	@echo "install       backend .venv 생성 (uv)"
@@ -19,6 +21,9 @@ help:
 	@echo "up-full       클린 클론 · 데모 전체 컨테이너"
 	@echo "migrate       미적용 MS-SQL 마이그레이션 실행"
 	@echo "api           FastAPI 개발 서버 기동"
+	@echo "web-install   프론트엔드 의존성 설치 (npm ci)"
+	@echo "web           Vue 개발 서버 기동"
+	@echo "web-check     Vue 타입 검사 + 프로덕션 빌드"
 
 install:
 	cd $(BE) && uv sync
@@ -75,5 +80,11 @@ mcp-inspect:
 api:
 	cd $(BE) && uv run uvicorn api.main:app --reload
 
+web-install:
+	cd $(WEB) && $(NPM) ci
+
+web:
+	cd $(WEB) && $(NPM) run dev
+
 web-check:
-	cd web && npx vue-tsc --noEmit && npm run build
+	cd $(WEB) && $(NPM) run type-check && $(NPM) run build

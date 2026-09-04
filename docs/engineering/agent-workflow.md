@@ -112,6 +112,6 @@ LLM 문장 자체의 골든 파일 대조는 사용하지 않는다. 비결정�
 | 상위 지침 크기 측정 | `.harness/report_agent_budget.py` |
 | 편집 직후 검사 | `.harness/on-edit.sh` + `.codex/hooks.json` |
 | 커밋 전 통합 게이트 | `Makefile` |
-| PR 게이트 | `.github/workflows/backend.yml` |
+| PR 게이트 | `.github/workflows/backend.yml` · `.github/workflows/web.yml` |
 
 새 루프를 추가하면 이 표, 실제 구현, [`validation.md`](validation.md)를 같은 변경에서 갱신한다.

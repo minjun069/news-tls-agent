@@ -15,6 +15,25 @@
       },
       "reason": "SqlRepository.list_issues는 schema.md §4.2의 기존 이슈 목록 질의를 구현하고, IssueSummary와 app/search.py는 source-and-ingestion.md의 적재 형식 및 ai/specification.md §4의 keyword·semantic·RRF 입력·출력 계약을 변경하지 않는다."
     },
+    "frontend behavior": {
+      "files": {
+        "web/src/App.vue": "6fd94808c8fd716715003efb72df08d97809ee3072398e025bfd2456e3fd06ff",
+        "web/src/api/client.ts": "0fc2191e7a010d51207481b949366617910302a0b76621b8c92934928f8fcf71",
+        "web/src/api/sse.ts": "4631cdca11274fce8d920a5e8a7e27a65af05e0733be3b43032dfb1387bb1cde",
+        "web/src/api/types.ts": "25c359b3592363ce44524692a05cffe74e40bad85ecc752eaf96478279f90443",
+        "web/src/components/ArticleDetail.vue": "4ef270141e2f5a3b44f02749c4c43f5b16e1cc5f457397874aaadfa973dfab5a",
+        "web/src/components/ChatPanel.vue": "2c44962d8ead42754dd09292bb0d9ad36db9143dfcd1b0dd5ce7e2c7882d814c",
+        "web/src/components/MarkdownContent.vue": "b211b9f7254fa44430349cb3f827b2b2f7d559c6f79e8c371c04a6cb563e7428",
+        "web/src/components/TimelineEventPanel.vue": "c035b364925b6c8c94740b9454aa4096e4fba904f55e858d1e8a18b024767591",
+        "web/src/main.ts": "5549ec06f2dd3658a71b70b96a0f7de45c4ee7111870780def3f9b2d47955ff0",
+        "web/src/router/index.ts": "d8a18d28538c30e5e80cbf8b7fa4cb2c7831472e85fd25a674dfe507ba722674",
+        "web/src/style.css": "ab663f12724782726200917724302235cf65d9f5914da415ecc0bebbb93a55a0",
+        "web/src/utils/format.ts": "5f528436f8c57ef65fa2c194680afe941bd214573733a980f98eab73c14ca101",
+        "web/src/views/IssueDetailView.vue": "8af02f167628fac0032bc4184334b00a370537e928fa3f91afd03e872c294a41",
+        "web/src/views/IssueListView.vue": "e064f5b8e03c75457435023f9ea5d4bdc76a2a8dbdfde21ced795591ea4b4479"
+      },
+      "reason": "web/src는 docs/product/screens.md의 두 화면과 생성·대화 SSE 표기 규칙을 그대로 구현하며 새 화면, 상태값, 사용자 입력·출력 계약을 추가하지 않았다."
+    },
     "source data and ingestion": {
       "files": {
         "backend/core/models.py": "025510dd81db9e06cca13721db9f5d5ef9d80149ce8044575bb79957b2da5c98"
