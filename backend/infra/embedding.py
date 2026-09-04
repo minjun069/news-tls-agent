@@ -9,8 +9,8 @@ from google.genai import types
 
 from core.config import GeminiConfig
 
-_DOCUMENT_TASK = "RETRIEVAL_DOCUMENT"
-_QUERY_TASK = "RETRIEVAL_QUERY"
+_DOCUMENT_PREFIX = "title: none | text: "
+_QUERY_PREFIX = "task: search result | query: "
 
 
 class GeminiEmbeddingProvider:
@@ -18,6 +18,7 @@ class GeminiEmbeddingProvider:
 
     def __init__(self, config: GeminiConfig, client: genai.Client | None = None) -> None:
         self._model = config.embedding_model
+        self._dimensions = config.embedding_dimensions
         self._client = client if client is not None else genai.Client(api_key=config.api_key)
 
     def embed_documents(self, texts: Sequence[str]) -> list[tuple[float, ...]]:
@@ -25,8 +26,13 @@ class GeminiEmbeddingProvider:
             return []
         response = self._client.models.embed_content(
             model=self._model,
-            contents=list(texts),
-            config=types.EmbedContentConfig(task_type=_DOCUMENT_TASK),
+            contents=[
+                types.Content(
+                    parts=[types.Part.from_text(text=f"{_DOCUMENT_PREFIX}{text}")],
+                )
+                for text in texts
+            ],
+            config=types.EmbedContentConfig(output_dimensionality=self._dimensions),
         )
         return _extract_vectors(response, expected_count=len(texts))
 
@@ -35,8 +41,8 @@ class GeminiEmbeddingProvider:
             raise ValueError("임베딩 질의는 빈 문자열일 수 없습니다")
         response = self._client.models.embed_content(
             model=self._model,
-            contents=text,
-            config=types.EmbedContentConfig(task_type=_QUERY_TASK),
+            contents=f"{_QUERY_PREFIX}{text.strip()}",
+            config=types.EmbedContentConfig(output_dimensionality=self._dimensions),
         )
         return _extract_vectors(response, expected_count=1)[0]
 

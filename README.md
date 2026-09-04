@@ -90,6 +90,7 @@ make migrate
 cd backend
 uv run python -m scripts.01_validate_raw ../data/raw/news.jsonl
 uv run python -m scripts.02_load_mssql ../data/raw/news.jsonl --batch-size 200
+uv run python -m scripts.03_build_vectors ../data/raw/news.jsonl --batch-size 32
 ```
 
 루트에서 API를 실행한다.
@@ -118,9 +119,10 @@ make mcp-inspect
 
 서비스 기동과 뉴스 적재는 별도다. 실제 원본 `news.jsonl` 필드(`article_title`,
 `article_service_daytime`, `text` 등)를 검증·정규화해 MS-SQL에 직접 배치 적재하는 S2 경로는
-완료됐다. `scripts/03_build_vectors.py`와 실제 Qdrant `articles` 컬렉션 적재는 아직 완료되지
-않았다. 따라서 S9 E2E는 고정 기사 픽스처로 제품 흐름을 검증하지만 실제 벡터 검색 준비 완료를
-의미하지 않는다.
+완료됐다. `scripts/03_build_vectors.py`는 같은 원본을 스트리밍해 Gemini dense와 Qdrant BM25를
+배치 적재하고, 재시도·재개·전체 ID 대조 결과를 JSON으로 출력한다. 전체 dense 적재 명령은 기사
+제목·요약·본문을 Google Gemini API로 전송하므로 데이터 외부 전송 권한과 API 한도를 먼저
+확인한다. 외부 전송 없이 BM25만 준비하려면 `--sparse-only`를 사용한다.
 
 전체 데이터 경로와 현재 경계는 다음과 같다.
 
@@ -128,8 +130,11 @@ make mcp-inspect
 data/raw/*.jsonl
   → scripts/01_validate_raw.py
   → scripts/02_load_mssql.py → MS-SQL
-  → scripts/03_build_vectors.py → Qdrant  (미구현)
+  → scripts/03_build_vectors.py → Qdrant
 ```
+
+현재 로컬 `articles` 컬렉션에는 실제 원본과 ID가 일치하는 BM25 포인트 178,887건이 있으며,
+전체 dense 적재와 semantic·hybrid 실데이터 비교가 끝나야 S3가 완료된다.
 
 현 상태와 입력·제외·정합성 계약은
 [`docs/data/source-and-ingestion.md`](docs/data/source-and-ingestion.md) 및

@@ -37,6 +37,7 @@ class GeminiConfig:
     api_key: str
     model: str
     embedding_model: str
+    embedding_dimensions: int
 
 
 @dataclass(frozen=True)
@@ -108,19 +109,35 @@ def load_mssql_config(env: Mapping[str, str]) -> MssqlConfig:
     )
 
 
+def load_qdrant_config(env: Mapping[str, str]) -> QdrantConfig:
+    """Qdrant만 사용하는 적재 스크립트가 전체 앱 설정 없이 접속 정보를 읽는다."""
+    return QdrantConfig(
+        url=_optional(env, "QDRANT_URL", "http://localhost:6333"),
+        collection=_optional(env, "QDRANT_COLLECTION", "articles"),
+    )
+
+
+def load_embedding_dimensions(env: Mapping[str, str]) -> int:
+    """dense 컬렉션과 Gemini 호출이 공유하는 벡터 차원을 읽는다."""
+    return _positive_int(env, "GEMINI_EMBEDDING_DIMENSIONS", 3072)
+
+
+def load_gemini_config(env: Mapping[str, str]) -> GeminiConfig:
+    """Gemini 생성·임베딩 어댑터의 공용 설정을 읽는다."""
+    return GeminiConfig(
+        api_key=_required(env, "GOOGLE_API_KEY"),
+        model=_optional(env, "GEMINI_MODEL", "gemini-3.6-flash"),
+        embedding_model=_optional(env, "GEMINI_EMBEDDING_MODEL", "gemini-embedding-2"),
+        embedding_dimensions=load_embedding_dimensions(env),
+    )
+
+
 def load_settings(env: Mapping[str, str]) -> Settings:
     """환경 매핑에서 전체 애플리케이션 설정을 읽는다."""
     return Settings(
         mssql=load_mssql_config(env),
-        qdrant=QdrantConfig(
-            url=_optional(env, "QDRANT_URL", "http://localhost:6333"),
-            collection=_optional(env, "QDRANT_COLLECTION", "articles"),
-        ),
-        gemini=GeminiConfig(
-            api_key=_required(env, "GOOGLE_API_KEY"),
-            model=_optional(env, "GEMINI_MODEL", "gemini-3.6-flash"),
-            embedding_model=_optional(env, "GEMINI_EMBEDDING_MODEL", "gemini-embedding-2"),
-        ),
+        qdrant=load_qdrant_config(env),
+        gemini=load_gemini_config(env),
         timeline=TimelineConfig(
             max_rounds=_positive_int(env, "TIMELINE_MAX_ROUNDS", 4),
             max_chain_depth=_positive_int(env, "TIMELINE_MAX_CHAIN_DEPTH", 2),

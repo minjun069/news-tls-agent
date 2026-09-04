@@ -23,8 +23,8 @@ AI 기능은 둘이다. **타임라인 생성 파이프라인**(S5의 P1~P8)과 
 > `404 NOT_FOUND`를 반환했다. API가 안내한 `gemini-3.6-flash`로 구조화 출력과 함수 호출 최소
 > 요청을 각각 성공시켜 기본 모델을 갱신했다.
 > 같은 날 `text-embedding-004`도 `embedContent`에서 `404 NOT_FOUND`를 반환했다. 모델 목록에서
-> `embedContent`를 지원하는 안정 버전 `gemini-embedding-2`를 확인하고 `RETRIEVAL_QUERY` 실제
-> 요청으로 기본 3,072차원 벡터를 검증해 임베딩 기본값을 갱신했다.
+> `embedContent`를 지원하는 안정 버전 `gemini-embedding-2`를 확인하고 실제 요청으로 기본
+> 3,072차원 벡터를 검증해 임베딩 기본값을 갱신했다.
 
 ### 1.2 출력 형식
 
@@ -280,14 +280,19 @@ LangChain `StructuredTool`로 변환한다. 대화 에이전트는 이 목록만
 
 기사 1건이 벡터 1개에 대응한다. 임베딩 텍스트는 `제목 + 요약 + 본문`을 결합해 구성한다.
 
-> 청킹하지 않는다. 시드 규모가 작고, 근거 귀속이 기사 단위이므로 **기사와 벡터를 1:1로 유지**하는 편이 단순하다.
+> 청킹하지 않는다. 근거 귀속과 원본 복원이 기사 ID 단위이므로 **기사와 벡터를 1:1로 유지**한다.
+
+`gemini-embedding-2`의 텍스트 입력 상한은 8,192토큰이며 초과 입력은 모델이 잘라 처리한다.
+기사와 포인트의 1:1 귀속을 유지하기 위해 초과 기사를 여러 포인트로 나누지 않는다. 이 동작은
+[Gemini Embeddings 공식 문서](https://ai.google.dev/gemini-api/docs/embeddings)의 입력 제한을
+따른다.
 
 ### 4.2 컬렉션 설계
 
 | 항목 | 값 |
 |---|---|
 | 컬렉션명 | `articles` |
-| dense named vector | `dense`, Cosine, `gemini-embedding-2` 기본 출력 3,072차원 |
+| dense named vector | `dense`, Cosine, `GEMINI_EMBEDDING_DIMENSIONS` 기본 3,072차원 |
 | sparse named vector | `bm25`, Qdrant BM25, IDF modifier |
 | BM25 텍스트 처리 | multilingual tokenizer, stemmer 없음, stopwords 없음 |
 | payload | `article_id`, `service_date`, `title`, `category_middle` |
@@ -298,8 +303,10 @@ LangChain `StructuredTool`로 변환한다. 대화 에이전트는 이 목록만
 
 `title + summary + content` 결합 문자열은 dense와 BM25 vector 생성에 모두 쓰지만 payload에는
 저장하지 않는다. dense 임베딩이 실패한 기사도 `bm25`만 적재해 키워드 검색 대상으로 남긴다.
-Gemini 호출은 문서 배치에 `RETRIEVAL_DOCUMENT`, 검색 질의에 `RETRIEVAL_QUERY` task type을
-사용한다. API 오류와 Qdrant SDK 오류는 어댑터에서 삼키지 않아 상위 호출자가 재시도를 결정한다.
+`gemini-embedding-2`는 `task_type`을 지원하지 않으므로 문서는 `title: none | text: ...`, 질의는
+`task: search result | query: ...` 형식으로 구분한다. 문서 배치는 문자열 목록을 그대로 넘기지
+않고 기사마다 별도 SDK `Content` 객체로 감싸야 기사별 벡터가 각각 반환된다. API 오류와 Qdrant
+SDK 오류는 어댑터에서 삼키지 않아 적재 스크립트가 유한 지수 백오프 재시도를 수행한다.
 
 payload에 `service_date`를 두는 이유는 **기간 필터를 검색 단계에서 적용**하기 위함이다
 (NFR-05). 키워드와 의미 검색 모두 Qdrant query filter로 기간을 먼저 제한한 뒤 `top_k`를

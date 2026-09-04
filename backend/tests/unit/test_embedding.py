@@ -31,7 +31,12 @@ def response(*vectors: list[float]):
 
 
 def config() -> GeminiConfig:
-    return GeminiConfig(api_key="test-key", model="test-llm", embedding_model="test-embedding")
+    return GeminiConfig(
+        api_key="test-key",
+        model="test-llm",
+        embedding_model="test-embedding",
+        embedding_dimensions=768,
+    )
 
 
 def test_provider_builds_sdk_client_with_configured_api_key(monkeypatch) -> None:
@@ -49,7 +54,7 @@ def test_provider_builds_sdk_client_with_configured_api_key(monkeypatch) -> None
     assert captured == {"api_key": "test-key"}
 
 
-def test_embed_documents_batches_inputs_with_retrieval_document_task() -> None:
+def test_embed_documents_wraps_separate_contents_with_retrieval_prefix() -> None:
     models = FakeModels([response([0.1, 0.2], [0.3, 0.4])])
     provider = GeminiEmbeddingProvider(config(), client=FakeClient(models))
 
@@ -57,8 +62,13 @@ def test_embed_documents_batches_inputs_with_retrieval_document_task() -> None:
 
     assert vectors == [(0.1, 0.2), (0.3, 0.4)]
     assert models.calls[0]["model"] == "test-embedding"
-    assert models.calls[0]["contents"] == ["첫 기사", "둘째 기사"]
-    assert models.calls[0]["config"].task_type == "RETRIEVAL_DOCUMENT"
+    contents = models.calls[0]["contents"]
+    assert [content.parts[0].text for content in contents] == [
+        "title: none | text: 첫 기사",
+        "title: none | text: 둘째 기사",
+    ]
+    assert models.calls[0]["config"].task_type is None
+    assert models.calls[0]["config"].output_dimensionality == 768
 
 
 def test_embed_documents_returns_without_call_for_empty_batch() -> None:
@@ -69,15 +79,16 @@ def test_embed_documents_returns_without_call_for_empty_batch() -> None:
     assert models.calls == []
 
 
-def test_embed_query_uses_retrieval_query_task() -> None:
+def test_embed_query_uses_retrieval_query_prefix() -> None:
     models = FakeModels([response([0.5, 0.6])])
     provider = GeminiEmbeddingProvider(config(), client=FakeClient(models))
 
     vector = provider.embed_query("계엄 해제 절차")
 
     assert vector == (0.5, 0.6)
-    assert models.calls[0]["contents"] == "계엄 해제 절차"
-    assert models.calls[0]["config"].task_type == "RETRIEVAL_QUERY"
+    assert models.calls[0]["contents"] == "task: search result | query: 계엄 해제 절차"
+    assert models.calls[0]["config"].task_type is None
+    assert models.calls[0]["config"].output_dimensionality == 768
 
 
 def test_embed_query_rejects_blank_without_call() -> None:

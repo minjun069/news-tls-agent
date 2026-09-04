@@ -202,6 +202,7 @@ ID 중복이 모두 0건임을 확인했다. 같은 날 MS-SQL `articles`에는 
 
 ### 3.3 벡터 적재
 
+- 입력은 `data/raw/*.jsonl`이며 MS-SQL 적재와 같은 `raw_ingestion.py` 정규화 규칙을 공유한다.
 - dense·BM25 입력 텍스트: `제목 + 요약 + 본문`
 - 청킹하지 않음 (기사 1건 = Qdrant 포인트 1개)
 - named vector: `dense`(Cosine), `bm25`(sparse, IDF modifier)
@@ -210,6 +211,13 @@ ID 중복이 모두 0건임을 확인했다. 같은 날 MS-SQL `articles`에는 
 - 원문·결합 텍스트는 payload에 저장하지 않음
 - dense 임베딩 실패 시 BM25 sparse point는 저장하고 dense만 재적재 대상으로 남김
 - Qdrant 저장 실패 시 지수 백오프 재시도 (EX-04)
+- 기본 32건 배치, 최대 7회 재시도이며 대기 시간은 1초부터 최대 60초까지 두 배로 늘어난다.
+- 기본 재실행은 이미 dense 벡터가 있는 기사 ID를 건너뛴다. 원본이 바뀌어 같은 ID도 다시
+  임베딩해야 할 때만 `--force`를 사용한다.
+- 종료 시 원본 고유 ID 집합과 Qdrant 전체 ID 집합을 대조한다. dense 실패, 누락 ID, 원본에 없는
+  Qdrant ID 중 하나라도 있으면 JSON 결과를 `partial`로 출력하고 종료 코드 2를 반환한다.
+- `--sparse-only`는 기사 내용을 외부 임베딩 API로 보내지 않고 로컬 BM25만 먼저 적재할 때 쓴다.
+  이 실행은 의미 검색 준비가 끝나지 않았으므로 정상적으로 `partial`이다.
 
 ### 3.4 실행 순서
 
@@ -219,10 +227,12 @@ ID 중복이 모두 0건임을 확인했다. 같은 날 MS-SQL `articles`에는 
 cd backend
 uv run python -m scripts.01_validate_raw ../data/raw/news.jsonl
 uv run python -m scripts.02_load_mssql ../data/raw/news.jsonl --batch-size 200
+uv run python -m scripts.03_build_vectors ../data/raw/news.jsonl --batch-size 32
 ```
 
 MS-SQL 적재가 벡터 적재보다 **먼저** 수행되어야 한다. 벡터 검색이 반환한 `article_id`로 원문을
-조회하므로, 원문이 없으면 검색 결과를 표시할 수 없다.
+조회하므로, 원문이 없으면 검색 결과를 표시할 수 없다. 마지막 명령은 기사 제목·요약·본문을
+Google Gemini API에 전송하므로 데이터 외부 전송 권한과 API 한도를 확인한 환경에서 실행한다.
 
 ---
 

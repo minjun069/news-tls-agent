@@ -25,6 +25,10 @@ class FakeQdrantClient:
         self.counts = []
         self.queries = []
         self.query_responses = []
+        self.retrieves = []
+        self.retrieve_records = []
+        self.scrolls = []
+        self.scroll_responses = []
         self.count_value = 0
         self.error: Exception | None = None
 
@@ -49,6 +53,14 @@ class FakeQdrantClient:
     def query_points(self, **kwargs):
         self.queries.append(kwargs)
         return SimpleNamespace(points=self.query_responses.pop(0))
+
+    def retrieve(self, **kwargs):
+        self.retrieves.append(kwargs)
+        return self.retrieve_records
+
+    def scroll(self, **kwargs):
+        self.scrolls.append(kwargs)
+        return self.scroll_responses.pop(0)
 
 
 def store(client: FakeQdrantClient) -> QdrantVectorStore:
@@ -184,6 +196,38 @@ def test_upsert_allows_sparse_only_and_reuses_article_id() -> None:
     second = client.upserts[1]["points"][0]
     assert DENSE_VECTOR_NAME not in first.vector
     assert first.id == second.id == 9
+
+
+def test_dense_point_ids_returns_only_records_with_dense_vector() -> None:
+    client = FakeQdrantClient()
+    client.retrieve_records = [
+        SimpleNamespace(id=1, vector={DENSE_VECTOR_NAME: [0.1, 0.2]}),
+        SimpleNamespace(id=2, vector={BM25_VECTOR_NAME: {"text": "기사"}}),
+    ]
+
+    assert store(client).dense_point_ids([1, 2, 3]) == {1}
+    assert client.retrieves[0] == {
+        "collection_name": "articles",
+        "ids": [1, 2, 3],
+        "with_payload": False,
+        "with_vectors": [DENSE_VECTOR_NAME],
+    }
+
+
+def test_all_point_ids_scrolls_until_last_page() -> None:
+    client = FakeQdrantClient()
+    client.scroll_responses = [
+        ([SimpleNamespace(id=1), SimpleNamespace(id=2)], 2),
+        ([SimpleNamespace(id=3)], None),
+    ]
+
+    assert store(client).all_point_ids(batch_size=2) == {1, 2, 3}
+    assert [call["offset"] for call in client.scrolls] == [None, 2]
+
+
+def test_all_point_ids_rejects_invalid_batch_size() -> None:
+    with pytest.raises(ValueError, match="batch_size는 1 이상"):
+        store(FakeQdrantClient()).all_point_ids(batch_size=0)
 
 
 def test_vector_search_applies_date_filter_before_top_k() -> None:

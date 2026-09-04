@@ -35,6 +35,7 @@ def generator(models: FakeModels) -> GeminiStructuredGenerator:
         api_key="test-key",
         model="gemini-test",
         embedding_model="embedding-test",
+        embedding_dimensions=768,
     )
     return GeminiStructuredGenerator(config, client=client)
 

@@ -2,7 +2,15 @@ from __future__ import annotations
 
 import pytest
 
-from core.config import ConfigError, load_api_config, load_export_config, load_settings
+from core.config import (
+    ConfigError,
+    load_api_config,
+    load_embedding_dimensions,
+    load_export_config,
+    load_gemini_config,
+    load_qdrant_config,
+    load_settings,
+)
 
 
 def required_env() -> dict[str, str]:
@@ -18,6 +26,7 @@ def test_s5_defaults_use_verified_models_and_loop_limits() -> None:
 
     assert settings.gemini.model == "gemini-3.6-flash"
     assert settings.gemini.embedding_model == "gemini-embedding-2"
+    assert settings.gemini.embedding_dimensions == 3072
     assert settings.timeline.max_rounds == 4
     assert settings.timeline.max_chain_depth == 2
     assert settings.timeline.max_clarifications == 2
@@ -35,6 +44,21 @@ def test_timeline_limits_must_be_positive_integers() -> None:
     env = required_env() | {"TIMELINE_MAX_ROUNDS": "four"}
     with pytest.raises(ConfigError, match="정수"):
         load_settings(env)
+
+
+def test_vector_only_settings_do_not_require_mssql_credentials() -> None:
+    gemini = load_gemini_config({"GOOGLE_API_KEY": "test-key"})
+    qdrant = load_qdrant_config({})
+
+    assert gemini.embedding_dimensions == 3072
+    assert qdrant.collection == "articles"
+
+
+def test_embedding_dimensions_must_be_positive() -> None:
+    with pytest.raises(ConfigError, match="1 이상"):
+        load_gemini_config({"GOOGLE_API_KEY": "test-key", "GEMINI_EMBEDDING_DIMENSIONS": "0"})
+
+    assert load_embedding_dimensions({}) == 3072
 
 
 def test_api_origins_are_split_trimmed_and_deduplicated() -> None:
