@@ -83,7 +83,12 @@ def build_url(config: MssqlConfig, database: str | None = None) -> str:
 
 def create_db_engine(config: MssqlConfig, database: str | None = None) -> Engine:
     """엔진을 만든다. 모듈 레벨 전역으로 두지 않는다 (docs/engineering/code-conventions.md)."""
-    return create_engine(build_url(config, database), pool_pre_ping=True, future=True)
+    return create_engine(
+        build_url(config, database),
+        pool_pre_ping=True,
+        future=True,
+        fast_executemany=True,
+    )
 
 
 def create_session_factory(engine: Engine) -> sessionmaker[Session]:

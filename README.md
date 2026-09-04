@@ -82,6 +82,19 @@ make install
 make web-install
 docker compose up -d
 make migrate
+```
+
+최초 적재 또는 원본 갱신 시 전체 원본을 검증한 뒤 MS-SQL에 직접 적재한다.
+
+```bash
+cd backend
+uv run python -m scripts.01_validate_raw ../data/raw/news.jsonl
+uv run python -m scripts.02_load_mssql ../data/raw/news.jsonl --batch-size 200
+```
+
+루트에서 API를 실행한다.
+
+```bash
 make api
 ```
 
@@ -103,24 +116,24 @@ make mcp-inspect
 
 ## 데이터 적재 상태
 
-서비스 기동과 뉴스 적재는 별도다. 현재 저장소에는 실제 원본 `news.jsonl` 필드
-(`article_title`, `article_service_daytime`, `text` 등)을 정규화 필드로 바꾸는 S2 매핑과
-`scripts/03_build_vectors.py`가 아직 완료되지 않았다. 따라서 S9 E2E는 고정 기사 픽스처로 제품
-흐름을 검증하지만 실제 원본 적재 완료를 의미하지 않는다.
+서비스 기동과 뉴스 적재는 별도다. 실제 원본 `news.jsonl` 필드(`article_title`,
+`article_service_daytime`, `text` 등)를 검증·정규화해 MS-SQL에 직접 배치 적재하는 S2 경로는
+완료됐다. `scripts/03_build_vectors.py`와 실제 Qdrant `articles` 컬렉션 적재는 아직 완료되지
+않았다. 따라서 S9 E2E는 고정 기사 픽스처로 제품 흐름을 검증하지만 실제 벡터 검색 준비 완료를
+의미하지 않는다.
 
-완료된 뒤의 정식 순서는 다음과 같다.
+전체 데이터 경로와 현재 경계는 다음과 같다.
 
 ```text
 data/raw/*.jsonl
-  → scripts/01_extract_seed.py
-  → scripts/02_load_mssql.py
-  → scripts/03_build_vectors.py
+  → scripts/01_validate_raw.py
+  → scripts/02_load_mssql.py → MS-SQL
+  → scripts/03_build_vectors.py → Qdrant  (미구현)
 ```
 
 현 상태와 입력·제외·정합성 계약은
 [`docs/data/source-and-ingestion.md`](docs/data/source-and-ingestion.md) 및
 [`docs/engineering/roadmap.md`](docs/engineering/roadmap.md)의 S2·S3 체크리스트를 기준으로 한다.
-없는 스크립트를 실행 가능한 절차로 제시하지 않는다.
 
 ## 검증
 
