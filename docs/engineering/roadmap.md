@@ -15,11 +15,11 @@ S1 기반 ─┬─ S2 데이터 계층 ─┬─ S4 MCP 서버 ─ S5 생성 �
 
 ---
 
-## 현재 작업 인수인계 — S2 전처리 착수 전
+## S2 전처리 인수인계 기록
 
 ### 작업 트리
 
-현재 브랜치는 `feat/s2-data-layer`, HEAD는 `3679944 chore(harness): 문서 변경 없음 검토와 CI 게이트 통일`이다. 하네스 변경은 커밋됐으며, 아래는 S2 전처리 구현을 시작하기 전에 확정한 실제 원본·평가 계약과 작업 상태다.
+당시 브랜치는 `feat/s2-data-layer`, HEAD는 `3679944 chore(harness): 문서 변경 없음 검토와 CI 게이트 통일`이었다. 하네스 변경은 커밋됐으며, 아래는 S2 전처리 구현을 시작하기 전에 확정한 실제 원본·평가 계약과 작업 상태다.
 
 ### 문서 라우팅의 정확한 역할
 
@@ -324,12 +324,12 @@ HTTP 메뉴도 MCP `export_briefing`을 호출하므로 대화 도구와 구현�
 
 ## S9 · 마무리
 
-- [ ] CI 확장 — 서비스 컨테이너(MS-SQL, Qdrant)로 통합 테스트
-- [ ] E2E 테스트 — 생성 → 조회 → 근거 확인 → 대화 → 내보내기 ([PRD Success Metrics](../REQUIREMENTS.md#36-success-metrics))
-- [ ] CD — `api`·`mcp_server` 이미지 빌드 → GHCR 푸시
-- [ ] `README.md` — 아키텍처, 실행 절차, CI 배지
-- [ ] 클린 클론 재현 테스트 — `docker compose --profile full up -d` 한 줄 (NFR-13, 모드 B)
-- [ ] ADR 정리
+- [x] CI 확장 — 서비스 컨테이너(MS-SQL, Qdrant)로 통합 테스트
+- [x] E2E 테스트 — 생성 → 조회 → 근거 확인 → 대화 → 내보내기 ([PRD Success Metrics](../REQUIREMENTS.md#36-success-metrics))
+- [x] CD 워크플로 — `api`·`mcp_server` 이미지 빌드 → GHCR 푸시
+- [x] `README.md` — 아키텍처, 실행 절차, CI 배지
+- [x] 클린 클론 재현 테스트 — `docker compose --profile full up -d` 한 줄 (NFR-13, 모드 B)
+- [x] ADR 정리
 
 **완료 기준**
 - PR에서 lint·unit·integration·e2e·web 잡 모두 초록불
@@ -337,6 +337,12 @@ HTTP 메뉴도 MCP `export_briefing`을 호출하므로 대화 도구와 구현�
 - 클린 클론에서 `docker compose --profile full up -d` 로 기동
 
 > CI에서 MS-SQL을 서비스 컨테이너로 띄우는 것이 이 스프린트의 학습 지점이다. 로컬은 네이티브, CI는 컨테이너인 이중 구성을 다루게 된다.
+
+로컬 완료 검증에서는 별도 빈 Compose 볼륨으로 전체 서비스를 기동해 마이그레이션 종료 코드 0,
+API·웹·MS-SQL·Qdrant 헬스 통과, 실제 통합 테스트와 E2E, 세 이미지 빌드를 확인했다. PR 잡과
+`v*` 태그의 실제 GHCR 게시 결과는 해당 커밋을 원격에 push한 뒤 GitHub Actions에서 확인한다.
+S2 원본 필드 매핑과 S3 `scripts/03_build_vectors.py`의 미완료 상태는 S9 픽스처 E2E가 대신하지
+않으며, 위 S2·S3 체크리스트에 계속 남긴다.
 
 ---
 

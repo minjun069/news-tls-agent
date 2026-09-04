@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -24,5 +27,100 @@ jobs:
       - name: 전체 검사
         run: make check
 
-  # MS-SQL·Qdrant 서비스 통합 테스트는 S9에서 추가한다.
-  # docs/engineering/agent-workflow.md L3 참조.
+  integration:
+    runs-on: ubuntu-latest
+    env:
+      GOOGLE_API_KEY: ci-placeholder
+      MSSQL_HOST: localhost
+      MSSQL_PORT: 1433
+      MSSQL_DB: newsagent
+      MSSQL_USER: sa
+      MSSQL_PASSWORD: NewsAgent_CI_2026!
+      MSSQL_DRIVER: ODBC Driver 18 for SQL Server
+      MSSQL_TRUST_CERT: "yes"
+      MSSQL_COLLATION: Korean_Wansung_CI_AS
+      QDRANT_URL: http://localhost:6333
+      QDRANT_COLLECTION: articles_ci
+    services:
+      mssql:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: Y
+          MSSQL_PID: Developer
+          MSSQL_SA_PASSWORD: NewsAgent_CI_2026!
+          MSSQL_COLLATION: Korean_Wansung_CI_AS
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'NewsAgent_CI_2026!' -C -Q 'SELECT 1'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+          --health-start-period 30s
+      qdrant:
+        image: qdrant/qdrant:v1.19.0
+        ports:
+          - 6333:6333
+        options: >-
+          --health-cmd "bash -c ':> /dev/tcp/127.0.0.1/6333'"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+          --health-start-period 5s
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: uv 설치
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Microsoft ODBC Driver 18 설치
+        run: |
+          ubuntu_version="$(. /etc/os-release && printf '%s' "$VERSION_ID")"
+          curl -sSL -o /tmp/packages-microsoft-prod.deb \
+            "https://packages.microsoft.com/config/ubuntu/${ubuntu_version}/packages-microsoft-prod.deb"
+          sudo dpkg -i /tmp/packages-microsoft-prod.deb
+          sudo apt-get update
+          sudo env ACCEPT_EULA=Y apt-get install -y msodbcsql18
+
+      - name: 의존성 설치
+        run: make install
+
+      - name: 스키마 마이그레이션
+        run: make migrate
+
+      - name: MS-SQL·Qdrant 통합 테스트
+        run: make test-integration
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: uv 설치
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: 의존성 설치
+        run: make install
+
+      - name: 핵심 사용자 흐름 테스트
+        run: make test-e2e
+
+  images:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Docker Buildx 설정
+        uses: docker/setup-buildx-action@v3
+
+      - name: Compose 구성 검사
+        run: make compose-check
+
+      - name: 애플리케이션 이미지 빌드
+        run: make images

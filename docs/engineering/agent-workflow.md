@@ -51,7 +51,7 @@ Codex의 PreToolUse 훅은 같은 라우팅을 패치 직전에 자동 실행해
 |---|---|---|---|
 | L1 | Python 편집 직후 | Codex PostToolUse → ruff·import-linter | S1 |
 | L2 | 커밋 전 | `make check` → lint·arch·unit·docs | S1 |
-| L3 | PR | GitHub Actions | S1, 통합은 S9 확장 |
+| L3 | PR | GitHub Actions의 check·integration·e2e·images·web 잡 | S1, S9 확장 |
 | L4 | 상위 지침 변경 | `make agent-budget` 측정; 목표 기준은 사용자 결정 대기 | S1 |
 | L5 | 계약 코드 변경 | 계약 문서 동반 변경 또는 파일 해시 기반 변경 없음 확인 | S1 |
 | L6 | 검색 방식 변경 | 같은 입력 집합의 3종 결과 비교 | S3 |
@@ -113,5 +113,7 @@ LLM 문장 자체의 골든 파일 대조는 사용하지 않는다. 비결정�
 | 편집 직후 검사 | `.harness/on-edit.sh` + `.codex/hooks.json` |
 | 커밋 전 통합 게이트 | `Makefile` |
 | PR 게이트 | `.github/workflows/backend.yml` · `.github/workflows/web.yml` |
+| 태그 이미지 게시 | `.github/workflows/release.yml` · `backend/Dockerfile` |
+| 전체 컨테이너 재현 | `docker-compose.yml` · `backend/Dockerfile` · `web/Dockerfile` |
 
 새 루프를 추가하면 이 표, 실제 구현, [`validation.md`](validation.md)를 같은 변경에서 갱신한다.

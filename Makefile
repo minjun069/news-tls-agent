@@ -5,7 +5,7 @@ BE := backend
 WEB := web
 NPM ?= npm
 
-.PHONY: help install web-install check fmt lint arch test test-all doc-sync doc-ack docs-for agent-budget up up-full down migrate mcp-inspect api web web-check
+.PHONY: help install web-install check fmt lint arch test test-integration test-e2e test-all doc-sync doc-ack docs-for agent-budget compose-check images up up-full down migrate mcp-inspect api web web-check
 
 help:
 	@echo "install       backend .venv 생성 (uv)"
@@ -17,6 +17,10 @@ help:
 	@echo "docs-for      PATHS='경로 ...'에 필요한 계약 문서 출력"
 	@echo "agent-budget  AGENTS.md 현재 크기 보고(강제 기준 없음)"
 	@echo "test-all      MS-SQL · Qdrant 포함 통합 테스트"
+	@echo "test-integration  실제 MS-SQL · Qdrant 통합 테스트"
+	@echo "test-e2e      생성부터 그래프·내보내기까지 사용자 흐름"
+	@echo "compose-check 전체 컨테이너 구성 문법 검사"
+	@echo "images        api · mcp · web 컨테이너 이미지 빌드"
 	@echo "up            개발 인프라: qdrant"
 	@echo "up-full       클린 클론 · 데모 전체 컨테이너"
 	@echo "migrate       미적용 MS-SQL 마이그레이션 실행"
@@ -44,6 +48,12 @@ arch:
 test:
 	@cd $(BE) && uv run pytest tests/unit tests/integration/test_api.py || [ $$? -eq 5 ]
 
+test-integration:
+	cd $(BE) && uv run pytest tests/integration
+
+test-e2e:
+	cd $(BE) && uv run pytest tests/e2e
+
 test-all:
 	cd $(BE) && uv run pytest tests
 
@@ -61,6 +71,12 @@ docs-for:
 
 agent-budget:
 	@python3 .harness/report_agent_budget.py
+
+compose-check:
+	docker compose --profile full config --quiet
+
+images:
+	docker compose --profile full build api mcp web
 
 up:
 	docker compose up -d

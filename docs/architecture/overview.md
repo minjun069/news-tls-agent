@@ -252,6 +252,12 @@ docker compose --profile full up -d
 `docker-compose.yml`에서 `qdrant`만 프로필이 없고, `mssql`·`api`·`mcp`·`web`은 `full` 프로필에 속한다.
 따라서 모드 A에서는 Qdrant만 뜬다 — ADR-0002의 "MS-SQL은 네이티브"가 유지된다.
 
+모드 B에서는 `migrate`가 MS-SQL 헬스 통과 뒤 스키마를 적용하고 성공 종료한 다음 `api`와
+`mcp`가 시작한다. `web`은 API 헬스 통과 뒤 시작한다. API 컨테이너는 stdio MCP 모듈을 자식
+프로세스로 실행하고, 독립 `mcp` 컨테이너는 Inspector 같은 별도 stdio 클라이언트가 같은
+이미지를 사용할 수 있음을 보장한다. 두 실행 역할의 경계는
+[ADR-0007](../decisions/0007-stdio-mcp-container-packaging.md)을 따른다.
+
 ### 4.1 접속 정보
 
 WSL에서 개발하므로 모드에 따라 호스트가 달라진다. `.env.example`에 두 벌을 모두 적는다.
@@ -344,7 +350,13 @@ PRD에서 다루지 않는 구현 수준의 규칙이다. 사용자가 겪는 �
 
 | 단계 | 내용 |
 |---|---|
-| CI | ruff, pytest(단위), pytest(통합 — 서비스 컨테이너), vue-tsc, 프론트 빌드 |
-| CD | 태그 push 시 `api`·`mcp_server` 이미지 빌드 → GHCR 푸시 |
+| CI | ruff·계층·단위, MS-SQL/Qdrant 서비스 통합, 핵심 흐름 E2E, Vue 타입·빌드, 컨테이너 이미지 빌드 |
+| CD | `v*` 태그 push 시 `api`·`mcp_server` 이미지 빌드 → GHCR 푸시 |
 
 통합 테스트는 GitHub Actions 서비스 컨테이너로 MS-SQL과 Qdrant를 기동해 수행한다. 로컬은 네이티브, CI는 컨테이너인 이중 구성이다.
+
+`backend/Dockerfile`은 공통 런타임에서 `api`, `mcp`, `migrate` 대상을 만든다. CD 이미지 이름은
+`ghcr.io/<owner>/<repository>-api:<tag>`와
+`ghcr.io/<owner>/<repository>-mcp-server:<tag>`다. 웹 이미지는 모드 B 재현용으로 CI에서
+빌드하지만 게시 대상은 아니다. 이미지 경계와 stdio 프로세스 배치는
+[ADR-0007](../decisions/0007-stdio-mcp-container-packaging.md)의 결정이다.
