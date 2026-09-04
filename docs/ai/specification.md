@@ -233,6 +233,11 @@ CONTENT: {본문}
 
 툴 description과 스키마는 [`MCP_TOOLS.md`](../contracts/mcp-tools.md)를 원천으로 한다.
 
+API 서버의 `infra/mcp_client.py`는 MCP SDK v2로 `tools/list`를 호출하고 각 `inputSchema`를
+LangChain `StructuredTool`로 변환한다. 대화 에이전트는 이 목록만 받아 LangGraph 기반
+`create_agent`에 전달하며 저장소 어댑터를 받지 않는다. 이 브리지 선택의 배경은
+[ADR-0006](../decisions/0006-mcp-v2-langchain-tool-bridge.md)를 따른다.
+
 관련 결정: [ADR-0001](../decisions/0001-mcp-data-access.md), [ADR-0004](../decisions/0004-export-intent-via-tool.md)
 
 ### 3.3 프롬프트 요점
@@ -257,6 +262,10 @@ CONTENT: {본문}
 - 대상은 직전 답변이 아니라 **이슈 브리핑**이다
 
 화면 표기 방식은 [`SCREENS.md`](../product/screens.md)를 원천으로 한다.
+
+모델 출력에는 문단 시작 표식 `ARTICLE:`과 `GENERAL:`을 강제한다. `app/agent.py`가 분할된
+스트리밍 토큰에서도 이 표식을 제거하고 HTTP SSE의 `source: article | general`로 바꾼다.
+표식이 없는 문단은 기사 근거로 승격하지 않고 `general`로 처리한다.
 
 ---
 

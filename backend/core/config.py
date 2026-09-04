@@ -48,11 +48,17 @@ class TimelineConfig:
 
 
 @dataclass(frozen=True)
+class ApiConfig:
+    cors_origins: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class Settings:
     mssql: MssqlConfig
     qdrant: QdrantConfig
     gemini: GeminiConfig
     timeline: TimelineConfig
+    api: ApiConfig
 
 
 def _required(env: Mapping[str, str], key: str) -> str:
@@ -112,4 +118,14 @@ def load_settings(env: Mapping[str, str]) -> Settings:
             max_clarifications=_positive_int(env, "TIMELINE_MAX_CLARIFICATIONS", 2),
             search_top_k=_positive_int(env, "TIMELINE_SEARCH_TOP_K", 20),
         ),
+        api=load_api_config(env),
     )
+
+
+def load_api_config(env: Mapping[str, str]) -> ApiConfig:
+    """브라우저가 접근할 출처 목록만 별도로 읽어 앱 import 시 비밀값을 요구하지 않는다."""
+    raw_origins = _optional(env, "CORS_ORIGINS", "http://localhost:5173")
+    origins = tuple(dict.fromkeys(item.strip() for item in raw_origins.split(",") if item.strip()))
+    if not origins:
+        raise ConfigError("CORS_ORIGINS에는 한 개 이상의 출처가 필요합니다")
+    return ApiConfig(cors_origins=origins)

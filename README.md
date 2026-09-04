@@ -32,6 +32,13 @@ make mcp-inspect
 Inspector 2.5.0은 Node.js 22.19 이상이 필요하다. WSL에서는 Windows의 `npx`가 아니라 WSL에
 설치한 Linux용 `node`·`npx`가 `PATH`에 있어야 한다.
 
+API 서버는 MCP SDK v2 stdio 클라이언트가 같은 서버의 도구 스키마를 읽어 LangChain 도구로
+변환한다. 개발 서버는 아래 명령으로 실행하며 Swagger UI는 `http://localhost:8000/docs`다.
+
+```bash
+make api
+```
+
 ## 실행 모드
 
 | 모드 | 앱 | 저장소 | 용도 |
@@ -59,6 +66,7 @@ cp .env.example .env
 docker compose up -d      # qdrant만
 make migrate              # 미적용 마이그레이션 실행
 make check                # 린트 · 계층 규칙 · 단위 테스트
+make api                  # FastAPI 개발 서버
 ```
 
 MS-SQL은 네이티브로 설치한다 ([ADR-0002](docs/decisions/0002-mssql-native-qdrant-container.md)).
@@ -102,5 +110,5 @@ make test-all   # 통합 포함
 
 ## 진행 상황
 
-[`docs/engineering/roadmap.md`](docs/engineering/roadmap.md) — **S5 타임라인 생성 파이프라인 구현 완료**.
-실데이터 성공 경로는 S2 원본 적재와 S3 Qdrant 컬렉션 적재 완료 후 사용할 수 있다.
+[`docs/engineering/roadmap.md`](docs/engineering/roadmap.md) — **S6 API 서버 코드 구현 완료**.
+실데이터 성공 경로는 `.env` 설정과 S2 원본 적재·S3 Qdrant 컬렉션 적재 완료 후 사용할 수 있다.

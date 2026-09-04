@@ -95,6 +95,7 @@ def read_article_payload(repository: Repository, article_id: int) -> dict[str, o
         "title": article.title,
         "sub_title": article.sub_title or "",
         "service_date": article.service_date.isoformat(),
+        "summary": article.summary or "",
         "content": content[:ARTICLE_CONTENT_LIMIT],
         "url": article.url or "",
         "truncated": truncated,
@@ -125,7 +126,7 @@ def list_issues_payload(repository: Repository) -> dict[str, object]:
 
 
 def get_issue_payload(repository: Repository, issue_id: int) -> dict[str, object]:
-    """이슈와 날짜순 이벤트·근거 기사 ID를 직렬화한다."""
+    """이슈와 날짜순 이벤트·대표 기사·근거 기사 순위를 직렬화한다."""
     try:
         issue = repository.get_issue(issue_id)
     except Exception as exc:  # noqa: BLE001 - 저장소 예외를 MCP 오류 규약으로 변환
@@ -133,21 +134,44 @@ def get_issue_payload(repository: Repository, issue_id: int) -> dict[str, object
     if issue is None:
         return _error("ISSUE_NOT_FOUND", "해당 이슈를 찾을 수 없습니다.")
 
-    events = [
-        {
-            "event_order": event.event_order,
-            "event_date": event.event_date.isoformat(),
-            "title": event.title,
-            "summary": event.summary or "",
-            "article_ids": [link.article.article_id for link in event.articles],
-        }
-        for event in issue.events
-    ]
+    events = []
+    for event in issue.events:
+        articles = sorted(
+            event.articles,
+            key=lambda link: (
+                -(link.relevance_score if link.relevance_score is not None else float("-inf")),
+                link.article.article_id,
+            ),
+        )
+        representative = event.representative_article
+        events.append(
+            {
+                "event_order": event.event_order,
+                "event_date": event.event_date.isoformat(),
+                "title": event.title,
+                "summary": event.summary or "",
+                "primary_article": {
+                    "article_id": representative.article_id,
+                    "title": representative.title,
+                    "service_date": representative.service_date.isoformat(),
+                },
+                "articles": [
+                    {
+                        "article_id": link.article.article_id,
+                        "title": link.article.title,
+                        "service_date": link.article.service_date.isoformat(),
+                        "relevance_score": link.relevance_score,
+                    }
+                    for link in articles
+                ],
+            }
+        )
     item = {
         "issue_id": issue.issue_id,
         "topic": issue.topic,
         "title": issue.title or issue.topic,
         "summary": issue.summary or "",
+        "generated_at": issue.generated_at.isoformat(),
         "events": events,
     }
     return {

@@ -239,16 +239,16 @@ make mcp-inspect
 | 관련 | ISS-001~006, ART-002, CHAT-001~006, NFR-07, EX-06 |
 |---|---|
 
-- [ ] `api/main.py`·`api/routes/` — FastAPI, CORS, `/health`
-- [ ] `api/deps.py` — **core ← infra 주입 지점**
-- [ ] `infra/mcp_client.py` — `langchain-mcp-adapters`
-- [ ] `app/agent.py` — LangGraph 그래프. `core.ports` 타입으로 주입받는다
-- [ ] 출처 구분 응답 (CHAT-004) — `token` 이벤트의 `source` 필드
-- [ ] 엔드포인트 ([`API.md`](../contracts/http-api.md))
-- [ ] SSE — 생성 진행(stage/round), 대화 토큰, 되묻기
-- [ ] 에이전트 실행 로그 (NFR-15)
-- [ ] `tests/integration/test_api.py`
-- [ ] 계층 규칙 검사 스크립트 — CI에 편입 (`AGENTS.md` §2.1)
+- [x] `api/main.py`·`api/routes/` — FastAPI, CORS, `/health`
+- [x] `api/deps.py` — **core ← infra 주입 지점**
+- [x] `infra/mcp_client.py` — MCP SDK v2 → LangChain 도구 브리지 ([ADR-0006](../decisions/0006-mcp-v2-langchain-tool-bridge.md))
+- [x] `app/agent.py` — LangGraph 그래프. `core.ports.ToolClient`로 주입받는다
+- [x] 출처 구분 응답 (CHAT-004) — `token` 이벤트의 `source` 필드
+- [x] S6 엔드포인트 — health·이슈 생성/목록/상세·기사·대화 ([`API.md`](../contracts/http-api.md))
+- [x] SSE — 생성 진행(stage/round), 대화 토큰, 되묻기
+- [x] 에이전트 실행 로그 (NFR-15)
+- [x] `tests/integration/test_api.py`
+- [x] 계층 규칙 검사 — 기존 import-linter 5개 계약과 `make check`에 편입
 
 **완료 기준**
 - Swagger에서 생성·조회·대화 전 기능 동작
@@ -256,6 +256,11 @@ make mcp-inspect
 - 대화 시 MCP 툴 호출이 감사 로그에 기록됨
 - MCP 서버를 내린 상태에서 대화 요청 시 오류 반환, 저장소 직접 조회 없음
 - `app/`이 `infra`를 import하지 않음이 CI로 강제됨
+
+> MCP Python SDK v2를 필수로 유지하기 위해 아직 v2를 지원하지 않는
+> `langchain-mcp-adapters` 대신 MCP `inputSchema`를 `StructuredTool`로 변환하는 얇은 브리지를
+> 구현했다. 실제 MS-SQL·Qdrant·Gemini 성공 경로는 `.env`와 적재 데이터가 있는 환경에서
+> Swagger로 검증해야 하며, 모의 의존성 API 조립·MCP 장애·계층 경계는 자동 검사한다.
 
 ---
 

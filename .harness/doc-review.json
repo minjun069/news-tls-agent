@@ -17,9 +17,9 @@
     },
     "source data and ingestion": {
       "files": {
-        "backend/core/models.py": "0e1c3cd77046685b0e348cd67fc2fc3ce3b09ff30a62a864441364d46f518ffa"
+        "backend/core/models.py": "025510dd81db9e06cca13721db9f5d5ef9d80149ce8044575bb79957b2da5c98"
       },
-      "reason": "backend/core/models.py의 S5 검색·생성·진행 모델 추가는 source-and-ingestion.md의 Article 원본·정규화 필드와 적재 상태 계약을 바꾸지 않으며, backend/pyproject.toml의 httpx 직접 의존성 명시는 Gemini 네트워크 예외를 기존 EX-03 재시도 경계로 변환하기 위한 것으로 validation.md의 make 명령과 검사 범위는 그대로다"
+      "reason": "core/models.py에는 S6 대화 이력·SSE 이벤트 모델만 추가했으며 기사 정규화 필드, 적재 제외 조건, 시드 JSONL 입력·출력은 변경하지 않았다"
     },
     "validation and CI": {
       "files": {

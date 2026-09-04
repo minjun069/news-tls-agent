@@ -3,7 +3,7 @@
 
 BE := backend
 
-.PHONY: help install check fmt lint arch test test-all doc-sync doc-ack docs-for agent-budget up up-full down migrate mcp-inspect web-check
+.PHONY: help install check fmt lint arch test test-all doc-sync doc-ack docs-for agent-budget up up-full down migrate mcp-inspect api web-check
 
 help:
 	@echo "install       backend .venv 생성 (uv)"
@@ -18,6 +18,7 @@ help:
 	@echo "up            개발 인프라: qdrant"
 	@echo "up-full       클린 클론 · 데모 전체 컨테이너"
 	@echo "migrate       미적용 MS-SQL 마이그레이션 실행"
+	@echo "api           FastAPI 개발 서버 기동"
 
 install:
 	cd $(BE) && uv sync
@@ -36,7 +37,7 @@ arch:
 	cd $(BE) && uv run lint-imports
 
 test:
-	@cd $(BE) && uv run pytest tests/unit || [ $$? -eq 5 ]
+	@cd $(BE) && uv run pytest tests/unit tests/integration/test_api.py || [ $$? -eq 5 ]
 
 test-all:
 	cd $(BE) && uv run pytest tests
@@ -70,6 +71,9 @@ migrate:
 
 mcp-inspect:
 	npx @modelcontextprotocol/inspector@2.5.0 --cli --config .mcp.json --server news-tls-agent --method tools/list --strict
+
+api:
+	cd $(BE) && uv run uvicorn api.main:app --reload
 
 web-check:
 	cd web && npx vue-tsc --noEmit && npm run build

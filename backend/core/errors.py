@@ -17,3 +17,7 @@ class LLMRateLimitError(LLMGenerationError):
 
 class PipelineInvariantError(TimelineGenerationError):
     """인용 검증 뒤 저장 가능한 이벤트가 남지 않는 등 내부 불변식 위반."""
+
+
+class DataAccessError(Exception):
+    """MCP 프로세스·전송·저장소를 통해 자료를 읽지 못했다."""

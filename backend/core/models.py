@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from enum import StrEnum
-from typing import Self
+from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -410,3 +410,38 @@ class TimelineGenerationResult(DomainModel):
             if not self.clarification_question:
                 raise ValueError("되묻기 결과에는 질문이 필요합니다")
         return self
+
+
+class ChatMessage(DomainModel):
+    """클라이언트가 매 요청에 다시 보내는 서버 비저장 대화 이력."""
+
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1)
+
+
+class ChatSource(StrEnum):
+    """CHAT-004가 화면에 노출하는 문단 단위 출처."""
+
+    ARTICLE = "article"
+    GENERAL = "general"
+
+
+class ChatToolProgress(DomainModel):
+    event: Literal["tool"] = "tool"
+    name: str
+    label: str
+
+
+class ChatToken(DomainModel):
+    event: Literal["token"] = "token"
+    text: str
+    source: ChatSource
+
+
+class ChatDone(DomainModel):
+    event: Literal["done"] = "done"
+    article_ids: tuple[int, ...] = ()
+    exports: tuple[dict[str, object], ...] = ()
+
+
+ChatEvent = ChatToolProgress | ChatToken | ChatDone

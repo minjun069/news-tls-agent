@@ -80,8 +80,8 @@
 | Search Engine | Qdrant BM25 · dense 벡터 · core RRF **3종 모두 구현** | 에이전트가 선택하거나 전부 수행 (NFR-04) |
 | AI | Google Gemini (`gemini-3.6-flash`) | 보유 키와 실제 API 가용성 기준 |
 | Embedding | Google `gemini-embedding-2` | 실제 API 기본 출력 3,072차원 확인 |
-| Agent | LangGraph `create_react_agent` | |
-| MCP | `mcp` v2 (`MCPServer`) + `langchain-mcp-adapters` | stdio 전송 |
+| Agent | LangGraph 기반 LangChain `create_agent` | MCP 도구 호출·토큰 스트리밍 |
+| MCP | `mcp` v2 (`MCPServer`, `ClientSession`) + LangChain 도구 브리지 | stdio 전송, [ADR-0006](../decisions/0006-mcp-v2-langchain-tool-bridge.md) |
 | PDF 생성 | 미정 | EXP-001 |
 | Notion 연동 | `notion-client` | EXP-002 |
 | 그래프 시각화 | 미정 (프론트 라이브러리) | GRPH-001 |
@@ -272,13 +272,23 @@ WSL2는 별도 네트워크라 Windows 호스트의 SQL Server에 `localhost`로
 - 컨테이너: `MSSQL_COLLATION` 환경변수
 - `000_bootstrap.sql`: `CREATE DATABASE ... COLLATE`
 
+### 4.3 API 프로세스 조립
+
+`api/routes/`는 `api/providers.py`의 포트만 의존한다. `api/main.py`가 FastAPI dependency
+override로 `api/deps.py` 구현을 연결하고, `api/deps.py`만 `infra`를 import한다. 따라서 라우터가
+조립점을 경유해 저장소 구현에 간접 의존하는 경로도 import-linter가 차단한다.
+
+조회·대화 요청은 `infra/mcp_client.py`가 stdio MCP 서버를 호출한다. 타임라인 생성은 S5의
+`TimelinePipeline`을 요청별 진행 sink와 함께 조립하며, 동기 파이프라인은 작업 스레드에서
+실행해 이벤트 루프가 SSE 진행 프레임을 계속 보낼 수 있게 한다.
+
 ---
 
 ## 5. 구현 지침
 
 PRD에서 다루지 않는 구현 수준의 규칙이다. 사용자가 겪는 것은 달라지지 않지만, 구현 시 지켜야 한다.
 
-### 4.1 타임라인 생성 파이프라인
+### 5.1 타임라인 생성 파이프라인
 
 | 항목 | 방침 |
 |---|---|
@@ -288,7 +298,7 @@ PRD에서 다루지 않는 구현 수준의 규칙이다. 사용자가 겪는 �
 | 이벤트 중복 병합 | 날짜와 근거 기사 집합이 같으면 하나로 병합한다 |
 | 검색 방식 선택 | 에이전트가 판단한다. 판단 결과를 로그에 남긴다 (NFR-14) |
 
-### 4.2 에이전트
+### 5.2 에이전트
 
 | 항목 | 방침 |
 |---|---|
@@ -300,14 +310,14 @@ PRD에서 다루지 않는 구현 수준의 규칙이다. 사용자가 겪는 �
 >
 > 관련 결정: [ADR-0004](../decisions/0004-export-intent-via-tool.md)
 
-### 4.3 내보내기
+### 5.3 내보내기
 
 | 항목 | 방침 |
 |---|---|
 | 진입점 | 화면 메뉴와 대화 두 가지. **두 경로가 같은 구현을 호출한다** |
 | 브리핑 구성 | 마크다운으로 먼저 만들고 형식별로 변환한다 |
 
-### 4.4 지식 그래프
+### 5.4 지식 그래프
 
 | 항목 | 방침 |
 |---|---|
