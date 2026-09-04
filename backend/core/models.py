@@ -92,6 +92,30 @@ class SearchResult(DomainModel):
     hits: tuple[SearchHit, ...]
 
 
+class ArticleSearchRequest(DomainModel):
+    """P3가 선택한 검색 방식과 방식별 입력을 보존한 요청."""
+
+    method: SearchMethod
+    options: SearchOptions
+    keyword_terms: tuple[str, ...] = ()
+    keyword_operator: KeywordOperator = KeywordOperator.OR
+    semantic_text: str | None = None
+
+    @model_validator(mode="after")
+    def validate_method_inputs(self) -> Self:
+        normalized_terms = tuple(
+            dict.fromkeys(term.strip() for term in self.keyword_terms if term.strip())
+        )
+        semantic_text = self.semantic_text.strip() if self.semantic_text else None
+        if self.method in {SearchMethod.KEYWORD, SearchMethod.HYBRID} and not normalized_terms:
+            raise ValueError("keyword·hybrid 검색에는 keyword_terms가 필요합니다")
+        if self.method in {SearchMethod.SEMANTIC, SearchMethod.HYBRID} and not semantic_text:
+            raise ValueError("semantic·hybrid 검색에는 semantic_text가 필요합니다")
+        object.__setattr__(self, "keyword_terms", normalized_terms)
+        object.__setattr__(self, "semantic_text", semantic_text)
+        return self
+
+
 class VectorPoint(DomainModel):
     """검색 인덱스 한 포인트의 dense 벡터, BM25 입력 텍스트, 메타데이터."""
 
@@ -186,3 +210,203 @@ class IssueCitation(DomainModel):
     event_id: int
     event_date: date
     event_title: str
+
+
+class PipelineStage(StrEnum):
+    """NFR-14 로그와 진행 알림에 쓰는 S5 단계."""
+
+    INTERPRET_INTENT = "intent"
+    CLARIFY = "clarify"
+    BUILD_HYPOTHETICAL_TIMELINE = "hypothetical"
+    GENERATE_SEARCH_QUERY = "search"
+    SELECT_ARTICLES = "select"
+    EXTRACT_RELATED_EVENTS = "expand"
+    REVIEW_SUFFICIENCY = "sufficiency"
+    GENERATE_HYPOTHESES = "hypothesize"
+    MERGE_TIMELINE = "merge"
+    SAVE_ISSUE = "save"
+    CACHED = "cached"
+
+
+class TerminationReason(StrEnum):
+    """타임라인 수집 루프의 네 종료 조건과 캐시 재사용."""
+
+    SUFFICIENCY_PASSED = "sufficiency_passed"
+    CONVERGED = "converged"
+    DEPTH_LIMIT = "depth_limit"
+    ROUND_LIMIT = "round_limit"
+    CACHED = "cached"
+
+
+class GenerationStatus(StrEnum):
+    """호출자가 다음 행동을 결정할 수 있는 생성 결과."""
+
+    COMPLETED = "completed"
+    REUSED = "reused"
+    NEEDS_CLARIFICATION = "needs_clarification"
+    NO_ARTICLES = "no_articles"
+
+
+class PipelineProgress(DomainModel):
+    """S6의 SSE와 CLI가 공유할 단계별 진행 값."""
+
+    round_number: int = Field(ge=0)
+    stage: PipelineStage
+    selected_article_count: int = Field(ge=0)
+    termination: TerminationReason | None = None
+
+
+class IntentInterpretation(DomainModel):
+    intent: str = Field(min_length=1)
+    needs_clarification: bool
+    clarification_question: str | None = None
+
+    @model_validator(mode="after")
+    def validate_clarification(self) -> Self:
+        question = self.clarification_question.strip() if self.clarification_question else None
+        if self.needs_clarification and not question:
+            raise ValueError("되묻기가 필요하면 clarification_question이 있어야 합니다")
+        object.__setattr__(self, "clarification_question", question)
+        return self
+
+
+class HypotheticalEvent(DomainModel):
+    expected_date: date
+    description: str = Field(min_length=1)
+
+
+class HypotheticalTimeline(DomainModel):
+    date_from: date
+    date_to: date
+    events: tuple[HypotheticalEvent, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_date_range(self) -> Self:
+        if self.date_from > self.date_to:
+            raise ValueError("가상 타임라인 시작일은 종료일보다 늦을 수 없습니다")
+        return self
+
+
+class SearchQueryDraft(DomainModel):
+    """P3 구조화 출력. 이유는 실행 로그에 남길 수 있도록 보존한다."""
+
+    method: SearchMethod
+    reason: str = Field(min_length=1)
+    keyword_terms: tuple[str, ...] = ()
+    keyword_operator: KeywordOperator = KeywordOperator.OR
+    semantic_text: str | None = None
+    date_from: date
+    date_to: date
+
+    @model_validator(mode="after")
+    def validate_query_inputs(self) -> Self:
+        normalized_terms = tuple(
+            dict.fromkeys(term.strip() for term in self.keyword_terms if term.strip())
+        )
+        semantic_text = self.semantic_text.strip() if self.semantic_text else None
+        if self.date_from > self.date_to:
+            raise ValueError("검색 시작일은 종료일보다 늦을 수 없습니다")
+        if self.method in {SearchMethod.KEYWORD, SearchMethod.HYBRID} and not normalized_terms:
+            raise ValueError("keyword·hybrid 검색에는 keyword_terms가 필요합니다")
+        if self.method in {SearchMethod.SEMANTIC, SearchMethod.HYBRID} and not semantic_text:
+            raise ValueError("semantic·hybrid 검색에는 semantic_text가 필요합니다")
+        object.__setattr__(self, "keyword_terms", normalized_terms)
+        object.__setattr__(self, "semantic_text", semantic_text)
+        return self
+
+    def to_search_request(self, *, top_k: int) -> ArticleSearchRequest:
+        return ArticleSearchRequest(
+            method=self.method,
+            options=SearchOptions(
+                top_k=top_k,
+                date_from=self.date_from,
+                date_to=self.date_to,
+            ),
+            keyword_terms=self.keyword_terms,
+            keyword_operator=self.keyword_operator,
+            semantic_text=self.semantic_text,
+        )
+
+
+class SelectedArticle(DomainModel):
+    article_id: int
+    event_date: date
+    event_summary: str = Field(min_length=1)
+    relevance_score: float = Field(ge=0, le=1)
+
+
+class RejectedArticle(DomainModel):
+    article_id: int
+    reason: str = Field(min_length=1)
+
+
+class ArticleSelection(DomainModel):
+    selected: tuple[SelectedArticle, ...] = ()
+    rejected: tuple[RejectedArticle, ...] = ()
+
+
+class RelatedEvent(DomainModel):
+    event_date: date
+    description: str = Field(min_length=1)
+    source_article_id: int
+
+
+class RelatedEvents(DomainModel):
+    events: tuple[RelatedEvent, ...] = ()
+
+
+class SufficiencyReview(DomainModel):
+    is_sufficient: bool
+    gaps: tuple[str, ...] = ()
+    updated_date_from: date | None = None
+    updated_date_to: date | None = None
+
+    @model_validator(mode="after")
+    def validate_updated_period(self) -> Self:
+        dates = (self.updated_date_from, self.updated_date_to)
+        if (dates[0] is None) is not (dates[1] is None):
+            raise ValueError("갱신 기간은 시작일과 종료일을 함께 반환해야 합니다")
+        if dates[0] is not None and dates[1] is not None and dates[0] > dates[1]:
+            raise ValueError("갱신 시작일은 종료일보다 늦을 수 없습니다")
+        return self
+
+
+class AdditionalHypotheses(DomainModel):
+    events: tuple[HypotheticalEvent, ...] = ()
+
+
+class MergedTimelineEvent(DomainModel):
+    event_date: date
+    title: str = Field(min_length=1, max_length=500)
+    summary: str | None = None
+    article_ids: tuple[int, ...] = Field(min_length=1)
+
+    @field_validator("article_ids")
+    @classmethod
+    def deduplicate_article_ids(cls, article_ids: tuple[int, ...]) -> tuple[int, ...]:
+        return tuple(dict.fromkeys(article_ids))
+
+
+class MergedTimeline(DomainModel):
+    title: str = Field(min_length=1, max_length=500)
+    summary: str | None = None
+    events: tuple[MergedTimelineEvent, ...] = ()
+
+
+class TimelineGenerationResult(DomainModel):
+    status: GenerationStatus
+    issue_id: int | None = None
+    clarification_question: str | None = None
+    termination: TerminationReason | None = None
+    rounds: int = Field(default=0, ge=0)
+    selected_article_count: int = Field(default=0, ge=0)
+
+    @model_validator(mode="after")
+    def validate_result_shape(self) -> Self:
+        if self.status in {GenerationStatus.COMPLETED, GenerationStatus.REUSED}:
+            if self.issue_id is None:
+                raise ValueError("완료·재사용 결과에는 issue_id가 필요합니다")
+        if self.status is GenerationStatus.NEEDS_CLARIFICATION:
+            if not self.clarification_question:
+                raise ValueError("되묻기 결과에는 질문이 필요합니다")
+        return self

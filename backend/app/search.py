@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from core.models import (
+    ArticleSearchRequest,
     KeywordQuery,
     SearchHit,
     SearchMethod,
@@ -34,24 +35,41 @@ class ArticleSearchService:
         options: SearchOptions,
     ) -> SearchResult:
         """선택한 방식으로 검색하고 방식과 순위를 함께 반환한다."""
-        keyword_query = KeywordQuery(
-            terms=(query,),
-            top_k=options.top_k,
-            date_from=options.date_from,
-            date_to=options.date_to,
+        normalized_query = SemanticQuery(text=query).text
+        request = ArticleSearchRequest(
+            method=method,
+            options=options,
+            keyword_terms=(normalized_query,) if method is not SearchMethod.SEMANTIC else (),
+            semantic_text=normalized_query if method is not SearchMethod.KEYWORD else None,
         )
-        if method is SearchMethod.KEYWORD:
-            hits = self._keyword_searcher.search_keywords(keyword_query)
-        elif method is SearchMethod.SEMANTIC:
-            hits = self._search_semantic(query, options)
+        return self.search_request(request)
+
+    def search_request(self, request: ArticleSearchRequest) -> SearchResult:
+        """P3의 키워드 조합과 의미 문장을 손실 없이 실행한다."""
+        options = request.options
+        if request.method is SearchMethod.KEYWORD:
+            hits = self._search_keywords(request)
+        elif request.method is SearchMethod.SEMANTIC:
+            hits = self._search_semantic(request.semantic_text or "", options)
         else:
-            keyword_hits = self._keyword_searcher.search_keywords(keyword_query)
-            semantic_hits = self._search_semantic(query, options)
+            keyword_hits = self._search_keywords(request)
+            semantic_hits = self._search_semantic(request.semantic_text or "", options)
             hits = reciprocal_rank_fusion(
                 [keyword_hits, semantic_hits],
                 top_k=options.top_k,
             )
-        return SearchResult(method=method, hits=tuple(hits))
+        return SearchResult(method=request.method, hits=tuple(hits))
+
+    def _search_keywords(self, request: ArticleSearchRequest) -> list[SearchHit]:
+        options = request.options
+        keyword_query = KeywordQuery(
+            terms=request.keyword_terms,
+            operator=request.keyword_operator,
+            top_k=options.top_k,
+            date_from=options.date_from,
+            date_to=options.date_to,
+        )
+        return self._keyword_searcher.search_keywords(keyword_query)
 
     def _search_semantic(self, query: str, options: SearchOptions) -> list[SearchHit]:
         semantic_query = SemanticQuery(

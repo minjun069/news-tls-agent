@@ -78,6 +78,17 @@ uv run python scripts/03_build_vectors.py
 
 적재 순서와 제외 기준은 [`docs/data/source-and-ingestion.md`](docs/data/source-and-ingestion.md).
 
+기사와 벡터 적재 후 S5 타임라인 생성 CLI를 실행한다. JSON Lines로 단계·라운드 진행이 먼저
+출력되고 마지막 줄에 생성·재사용·되묻기·기사 없음 결과가 출력된다.
+
+```bash
+cd backend
+uv run python -m scripts.04_generate_timeline "윤석열 대통령 탄핵심판과 파면"
+# 되묻기 응답을 이어갈 때
+uv run python -m scripts.04_generate_timeline "탄핵" \
+  --clarification "대한민국 대통령 탄핵심판" --clarification-count 1
+```
+
 ## 검증
 
 ```bash
@@ -91,5 +102,5 @@ make test-all   # 통합 포함
 
 ## 진행 상황
 
-[`docs/engineering/roadmap.md`](docs/engineering/roadmap.md) — **S4 MCP 서버 인터페이스 구현 완료**.
+[`docs/engineering/roadmap.md`](docs/engineering/roadmap.md) — **S5 타임라인 생성 파이프라인 구현 완료**.
 실데이터 성공 경로는 S2 원본 적재와 S3 Qdrant 컬렉션 적재 완료 후 사용할 수 있다.

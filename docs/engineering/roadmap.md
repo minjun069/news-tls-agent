@@ -200,23 +200,24 @@ make mcp-inspect
 | 관련 | ISS-001, ISS-006, EX-01~EX-05, AC-001~003, AC-008, AC-022, AC-023 |
 |---|---|
 
-가장 복잡한 스프린트다. LLM 호출이 8종 들어간다 ([`AI_SPEC.md`](../ai/specification.md) §2).
+가장 복잡한 스프린트다. S5에는 LLM 호출 P1~P8이 들어가고, P9 엔티티·관계 추출은 S8에서
+그래프 조회 시 실행한다 ([`AI_SPEC.md`](../ai/specification.md) §2).
 
-- [ ] `core/models.py`·`core/errors.py` — 도메인 스키마와 예외
-- [ ] P1 질의 의도 해석 + 되묻기
-- [ ] P2 가상 타임라인 생성
-- [ ] P3 검색 쿼리 생성 (방식 선택 포함)
-- [ ] P4 핵심 이벤트 선정 (배치 판정)
-- [ ] P5 선후 이벤트 추출
-- [ ] P6 충분성 검토
-- [ ] P7 가상 이벤트 생성
-- [ ] P8 타임라인 병합
-- [ ] 수집 루프 오케스트레이션 + **종료 조건 4가지** ([타임라인 종료 정책](../requirements/timeline.md#수집-루프-종료-정책))
-- [ ] 인용 검증 → 트랜잭션 저장
-- [ ] 파이프라인 실행 로그 (NFR-14)
-- [ ] CLI 진입점
-- [ ] `app/pipeline.py` — 수집 루프 오케스트레이션
-- [ ] `tests/unit/test_pipeline.py` — LLM 모킹. 허구 ID 주입, 무한 루프 방지
+- [x] `core/models.py`·`core/errors.py` — 도메인 스키마와 예외
+- [x] P1 질의 의도 해석 + 되묻기
+- [x] P2 가상 타임라인 생성
+- [x] P3 검색 쿼리 생성 (방식 선택 포함)
+- [x] P4 핵심 이벤트 선정 (배치 판정)
+- [x] P5 선후 이벤트 추출
+- [x] P6 충분성 검토
+- [x] P7 가상 이벤트 생성
+- [x] P8 타임라인 병합
+- [x] 수집 루프 오케스트레이션 + **종료 조건 4가지** ([타임라인 종료 정책](../requirements/timeline.md#수집-루프-종료-정책))
+- [x] 인용 검증 → 트랜잭션 저장
+- [x] 파이프라인 실행 로그 (NFR-14)
+- [x] CLI 진입점
+- [x] `app/pipeline.py` — 수집 루프 오케스트레이션
+- [x] `tests/unit/test_pipeline.py` — LLM 모킹. 허구 ID 주입, 무한 루프 방지
 
 **완료 기준**
 - CLI로 토픽 입력 시 MS-SQL에 이슈·이벤트·기사연결 저장
@@ -226,6 +227,10 @@ make mcp-inspect
 - 검색 0건 시 근거 없는 이슈가 저장되지 않음 (EX-01, EX-02)
 
 > **선행 검증**: 착수 직후 Gemini 구조화 출력과 도구 호출 최소 예제를 먼저 확인한다 ([PRD 공통 리스크](../REQUIREMENTS.md#7-공통-리스크)).
+
+`google-genai 1.75.0`과 `gemini-3.6-flash` 실제 API로 구조화 출력 Pydantic 파싱과 함수 호출을
+각각 확인했다. `gemini-2.5-flash`는 같은 계정에서 `404 NOT_FOUND`를 반환해 기본 모델과 문서
+계약을 함께 갱신했다.
 
 ---
 

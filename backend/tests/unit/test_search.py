@@ -6,7 +6,13 @@ import pytest
 from pydantic import ValidationError
 
 from app.search import ArticleSearchService
-from core.models import SearchHit, SearchMethod, SearchOptions
+from core.models import (
+    ArticleSearchRequest,
+    KeywordOperator,
+    SearchHit,
+    SearchMethod,
+    SearchOptions,
+)
 
 
 class FakeKeywordSearcher:
@@ -104,3 +110,25 @@ def test_search_rejects_blank_query_before_calling_adapters() -> None:
     assert keyword.queries == []
     assert vector.calls == []
     assert embedding.queries == []
+
+
+def test_planned_hybrid_search_preserves_keyword_terms_and_semantic_text() -> None:
+    service, keyword, vector, embedding = build_service(
+        [SearchHit(article_id=1, score=2)],
+        [SearchHit(article_id=2, score=0.8)],
+    )
+    request = ArticleSearchRequest(
+        method=SearchMethod.HYBRID,
+        options=SearchOptions(top_k=5, date_from=date(2025, 1, 1)),
+        keyword_terms=("윤석열", "탄핵"),
+        keyword_operator=KeywordOperator.AND,
+        semantic_text="대통령 탄핵 심판 진행",
+    )
+
+    result = service.search_request(request)
+
+    assert result.method is SearchMethod.HYBRID
+    assert keyword.queries[0].terms == ("윤석열", "탄핵")
+    assert keyword.queries[0].operator is KeywordOperator.AND
+    assert embedding.queries == ["대통령 탄핵 심판 진행"]
+    assert vector.calls[0][1].date_from == date(2025, 1, 1)
