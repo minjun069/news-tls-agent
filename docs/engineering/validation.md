@@ -5,6 +5,7 @@
 | 명령 | 검증 대상 | 시점 |
 |---|---|---|
 | `make install` | backend uv 환경 구성 | 최초 1회·의존성 변경 후 |
+| `make web-install` | `npm ci`로 잠금 파일 기준 프론트엔드 의존성 구성 | 최초 1회·의존성 변경 후 |
 | `make fmt` | Python 포맷·자동 수정 | 구현 중 |
 | `make lint` | ruff 린트·포맷 | 구현 중·커밋 전 |
 | `make arch` | import-linter 계층 계약 | 계층 변경·커밋 전 |
@@ -19,6 +20,7 @@
 | `make migrate` | 미적용 MS-SQL 마이그레이션 | DB 기동·스키마 변경 후 |
 | `make mcp-inspect` | MCP Inspector CLI로 툴 5종·입력/출력 스키마 엄격 검사 | S4 이후 MCP 변경 후 |
 | `make api` | FastAPI 개발 서버와 Swagger UI 기동 | S6 이후 로컬 개발 |
+| `make web` | Vue 개발 서버 기동 | S7 이후 로컬 개발 |
 | `make web-check` | vue-tsc + 빌드 | S7 이후 화면 변경 후 |
 
 계약 코드가 바뀌면 `make doc-sync`는 연결된 문서가 함께 바뀌었는지 먼저 확인한다. 문서의 입력·출력·외부 동작이 그대로라면 문서를 의미 없이 수정하지 않고 `make doc-ack REASON='검토한 계약과 변경이 없는 이유'`를 실행한다. 이 명령은 대상 파일의 SHA-256 해시와 근거를 `.harness/doc-review.json`에 기록한다. 파일 내용이 다시 바뀌면 해시가 달라져 확인은 무효가 되고 `make check`가 실패한다.

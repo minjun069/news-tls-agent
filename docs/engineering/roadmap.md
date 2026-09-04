@@ -269,18 +269,23 @@ make mcp-inspect
 | 관련 | 전 기능. 화면 기준은 [`SCREENS.md`](../product/screens.md) |
 |---|---|
 
-- [ ] `npm create vite@latest web -- --template vue-ts`
-- [ ] `.github/workflows/web.yml` — vue-tsc, build (S1-3에서 이월)
-- [ ] API 클라이언트 (SSE 수신 포함)
-- [ ] 이슈 목록 화면 — 생성 진행(라운드 표시), 되묻기 UI
-- [ ] 이슈 상세 화면 — 타임라인, **대표 기사 즉시 표시**, 근거 기사 목록
-- [ ] 대화 패널 — **출처별 표기 구분** (article / general)
-- [ ] 마크다운 렌더링
+- [x] `npm create vite@latest web -- --template vue-ts`
+- [x] `.github/workflows/web.yml` — vue-tsc, build (S1-3에서 이월)
+- [x] API 클라이언트 (SSE 수신 포함)
+- [x] 이슈 목록 화면 — 생성 진행(라운드 표시), 되묻기 UI
+- [x] 이슈 상세 화면 — 타임라인, **대표 기사 즉시 표시**, 근거 기사 목록
+- [x] 대화 패널 — **출처별 표기 구분** (article / general)
+- [x] 마크다운 렌더링
 
 **완료 기준**
-- 토픽 입력 → 생성 → 타임라인 → 근거 확인 → 대화 전 흐름 동작
-- 기사 근거와 일반 지식이 시각적으로 구분됨
-- `npm run build`, `vue-tsc --noEmit` 통과
+- [x] 토픽 입력 → 생성 → 타임라인 → 근거 확인 → 대화 전 흐름 연결
+- [x] 기사 근거와 일반 지식이 시각적으로 구분됨
+- [x] `npm run build`, `vue-tsc --noEmit` 통과
+
+`web/src/api/sse.ts`가 `fetch` 응답 스트림을 청크 경계와 무관하게 SSE 이벤트로 조립한다.
+생성 화면은 `clarify`의 `attempt`를 다음 요청의 `clarification_count`로 보내고, 상세 화면은 대화의
+참조 기사 ID를 해당 이벤트·기사 패널로 연결한다. 마크다운은 `marked`로 변환한 뒤 DOMPurify로
+정화해 표시하며, 웹 CI는 Node.js 22.19.0에서 잠금 파일 설치·타입 검사·빌드를 실행한다.
 
 ---
 
