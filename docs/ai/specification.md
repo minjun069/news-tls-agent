@@ -201,6 +201,11 @@ CONTENT: {본문}
 - 엔티티 목록 (표기, 유형)
 - 관계 목록 (주체, 대상, 관계 유형)
 
+구조화 출력 필드는 `entities[].name`, `entities[].entity_type`, `relations[].source`,
+`relations[].target`, `relations[].relation_type`이다. `source`와 `target`은 별도 ID를 생성하지 않고
+같은 응답의 `entities[].name` 표기를 정확히 참조한다. 애플리케이션은 중복 엔티티 표기와 목록에
+없는 관계 끝점을 Pydantic 검증에서 거부한 뒤에만 저장소를 호출한다.
+
 **지시 요점**
 - 기사에 등장하는 표기를 **그대로** 사용한다. 정식 명칭으로 바꾸지 않는다
 - 기사에 서술된 관계만 추출한다. 일반 상식으로 연결하지 않는다

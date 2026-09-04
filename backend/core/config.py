@@ -53,12 +53,21 @@ class ApiConfig:
 
 
 @dataclass(frozen=True)
+class ExportConfig:
+    download_dir: str
+    pdf_font_path: str
+    notion_token: str
+    notion_parent_page_id: str
+
+
+@dataclass(frozen=True)
 class Settings:
     mssql: MssqlConfig
     qdrant: QdrantConfig
     gemini: GeminiConfig
     timeline: TimelineConfig
     api: ApiConfig
+    export: ExportConfig
 
 
 def _required(env: Mapping[str, str], key: str) -> str:
@@ -119,6 +128,7 @@ def load_settings(env: Mapping[str, str]) -> Settings:
             search_top_k=_positive_int(env, "TIMELINE_SEARCH_TOP_K", 20),
         ),
         api=load_api_config(env),
+        export=load_export_config(env),
     )
 
 
@@ -129,3 +139,13 @@ def load_api_config(env: Mapping[str, str]) -> ApiConfig:
     if not origins:
         raise ConfigError("CORS_ORIGINS에는 한 개 이상의 출처가 필요합니다")
     return ApiConfig(cors_origins=origins)
+
+
+def load_export_config(env: Mapping[str, str]) -> ExportConfig:
+    """PDF 파일 위치와 선택적인 Notion 연결 설정을 읽는다."""
+    return ExportConfig(
+        download_dir=_optional(env, "EXPORT_DOWNLOAD_DIR", "downloads"),
+        pdf_font_path=_optional(env, "PDF_FONT_PATH"),
+        notion_token=_optional(env, "NOTION_TOKEN"),
+        notion_parent_page_id=_optional(env, "NOTION_PARENT_PAGE_ID"),
+    )

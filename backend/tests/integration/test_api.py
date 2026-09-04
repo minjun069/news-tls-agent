@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Mapping
+from datetime import date
 
 import httpx
 
@@ -9,11 +10,13 @@ from api import providers
 from api.main import create_app
 from core.errors import DataAccessError
 from core.models import (
+    ArticleGraph,
     ChatDone,
     ChatSource,
     ChatToken,
     ChatToolProgress,
     GenerationStatus,
+    GraphProgress,
     PipelineProgress,
     PipelineStage,
     TerminationReason,
@@ -74,6 +77,15 @@ class FakeMCPClient:
                     "truncated": False,
                 },
             }
+        if name == "export_briefing":
+            assert arguments == {"issue_id": 7, "format": "pdf", "parent_page_id": None}
+            return {
+                "ok": True,
+                "format": "pdf",
+                "file_name": "briefing.pdf",
+                "download_url": "/downloads/briefing.pdf",
+                "message": "PDF를 생성했습니다.",
+            }
         raise AssertionError(name)
 
 
@@ -117,6 +129,22 @@ class FakeAgent:
         yield ChatDone(article_ids=(10,), exports=())
 
 
+class FakeGraphService:
+    def __init__(self, progress_sink) -> None:
+        self._progress_sink = progress_sink
+
+    async def build(self, issue_id: int):
+        assert issue_id == 7
+        self._progress_sink(GraphProgress(remaining=1))
+        return (
+            ArticleGraph(
+                article_id=10,
+                article_title="기사",
+                article_service_date=date(2026, 9, 4),
+            ),
+        )
+
+
 def make_app(*, clarification: bool = False, offline: bool = False):
     app = create_app()
     client = OfflineMCPClient() if offline else FakeMCPClient()
@@ -133,11 +161,15 @@ def make_app(*, clarification: bool = False, offline: bool = False):
     async def agent_dependency():
         return FakeAgent()
 
+    async def graph_dependency():
+        return lambda sink: FakeGraphService(sink)
+
     app.dependency_overrides[providers.get_health_checker] = health_dependency
     app.dependency_overrides[providers.get_tool_client] = tool_dependency
     status = GenerationStatus.NEEDS_CLARIFICATION if clarification else GenerationStatus.COMPLETED
     app.dependency_overrides[providers.get_pipeline_factory] = pipeline_dependency
     app.dependency_overrides[providers.get_chat_agent] = agent_dependency
+    app.dependency_overrides[providers.get_graph_factory] = graph_dependency
     return app
 
 
@@ -207,3 +239,21 @@ def test_chat_returns_data_unavailable_without_repository_fallback() -> None:
     assert response.status_code == 200
     assert "event: error" in response.text
     assert '"reason":"data_unavailable"' in response.text
+
+
+def test_graph_stream_reports_extraction_and_article_attribution() -> None:
+    response = asyncio.run(request(make_app(), "GET", "/issues/7/graph"))
+
+    assert response.status_code == 200
+    assert "event: stage" in response.text
+    assert '"remaining":1' in response.text
+    assert "event: done" in response.text
+    assert '"article_id":10' in response.text
+    assert '"article_service_date":"2026-09-04"' in response.text
+
+
+def test_export_endpoint_uses_shared_exporter() -> None:
+    response = asyncio.run(request(make_app(), "POST", "/issues/7/export", json={"format": "pdf"}))
+
+    assert response.status_code == 200
+    assert response.json()["download_url"] == "/downloads/briefing.pdf"

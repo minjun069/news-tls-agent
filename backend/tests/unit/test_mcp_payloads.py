@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime
 
+from core.errors import IssueNotFoundError
 from core.models import (
     Article,
     EventArticle,
@@ -108,7 +109,8 @@ class FakeSearcher:
 
 class FakeExporter:
     def export_briefing(self, issue_id, output_format, parent_page_id):
-        assert issue_id == 7
+        if issue_id != 7:
+            raise IssueNotFoundError
         assert output_format == "pdf"
         assert parent_page_id is None
         return {
@@ -223,16 +225,12 @@ def test_storage_failure_uses_structured_error_instead_of_raising() -> None:
 
 
 def test_export_payload_is_explicitly_unconfigured_until_exporter_is_injected() -> None:
-    repository = FakeRepository()
-
     unconfigured = export_briefing_payload(
-        repository,
         None,
         issue_id=7,
         output_format="pdf",
     )
     configured = export_briefing_payload(
-        repository,
         FakeExporter(),
         issue_id=7,
         output_format="pdf",
@@ -248,7 +246,6 @@ def test_export_payload_is_explicitly_unconfigured_until_exporter_is_injected() 
     }
     assert (
         export_briefing_payload(
-            repository,
             FakeExporter(),
             issue_id=99,
             output_format="pdf",
@@ -257,7 +254,6 @@ def test_export_payload_is_explicitly_unconfigured_until_exporter_is_injected() 
     )
     assert (
         export_briefing_payload(
-            repository,
             FakeExporter(),
             issue_id=7,
             output_format="html",

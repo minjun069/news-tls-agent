@@ -212,6 +212,92 @@ class IssueCitation(DomainModel):
     event_title: str
 
 
+class ExtractedEntity(DomainModel):
+    """P9가 기사 표면형 그대로 반환하는 저장 전 엔티티."""
+
+    name: str = Field(min_length=1, max_length=300)
+    entity_type: str = Field(min_length=1, max_length=50)
+
+    @field_validator("name", "entity_type")
+    @classmethod
+    def strip_entity_text(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("엔티티 표기와 유형은 빈 문자열일 수 없습니다")
+        return stripped
+
+
+class ExtractedRelation(DomainModel):
+    """P9 엔티티 이름으로 양 끝점을 지칭하는 저장 전 관계."""
+
+    source: str = Field(min_length=1, max_length=300)
+    target: str = Field(min_length=1, max_length=300)
+    relation_type: str = Field(min_length=1, max_length=100)
+
+    @field_validator("source", "target", "relation_type")
+    @classmethod
+    def strip_relation_text(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("관계의 주체·대상·유형은 빈 문자열일 수 없습니다")
+        return stripped
+
+
+class ArticleGraphExtraction(DomainModel):
+    """기사 한 건에서 추출한 P9 구조화 출력."""
+
+    entities: tuple[ExtractedEntity, ...] = ()
+    relations: tuple[ExtractedRelation, ...] = ()
+
+    @model_validator(mode="after")
+    def validate_relation_endpoints(self) -> Self:
+        names = [entity.name for entity in self.entities]
+        if len(names) != len(set(names)):
+            raise ValueError("한 기사 안에서 엔티티 표기는 중복될 수 없습니다")
+        available = set(names)
+        for relation in self.relations:
+            if relation.source not in available or relation.target not in available:
+                raise ValueError("관계의 주체와 대상은 entities에 있어야 합니다")
+        return self
+
+
+class GraphNode(DomainModel):
+    id: int
+    name: str
+    type: str
+
+
+class GraphEdge(DomainModel):
+    id: int
+    source: int
+    target: int
+    type: str
+
+
+class ArticleGraph(DomainModel):
+    """NFR-16에 따라 기사 귀속을 보존하는 한 개의 그래프."""
+
+    article_id: int
+    article_title: str
+    article_service_date: date
+    nodes: tuple[GraphNode, ...] = ()
+    edges: tuple[GraphEdge, ...] = ()
+
+
+class GraphProgress(DomainModel):
+    remaining: int = Field(ge=0)
+
+
+class ExportFormat(StrEnum):
+    PDF = "pdf"
+    NOTION = "notion"
+
+
+class NotionPage(DomainModel):
+    page_id: str
+    url: str
+
+
 class PipelineStage(StrEnum):
     """NFR-14 로그와 진행 알림에 쓰는 S5 단계."""
 

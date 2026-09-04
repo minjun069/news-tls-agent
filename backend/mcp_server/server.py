@@ -11,10 +11,13 @@ from pathlib import Path
 from dotenv import load_dotenv
 from mcp.server import MCPServer
 
+from app.exporting import BriefingExportService
 from app.search import ArticleSearchService
 from core.config import load_settings
 from infra.db import create_db_engine, create_session_factory
 from infra.embedding import GeminiEmbeddingProvider
+from infra.notion import NotionBriefingPublisher
+from infra.pdf import FpdfBriefingRenderer
 from infra.qdrant import QdrantVectorStore
 from infra.repository import SqlRepository
 from mcp_server.tools import ToolDependencies, register_tools
@@ -53,7 +56,21 @@ def build_dependencies(env: Mapping[str, str]) -> ToolDependencies:
         vector_store=vector_store,
         embedding_provider=embedding_provider,
     )
-    return ToolDependencies(repository=repository, searcher=searcher)
+    export_config = settings.export
+    download_dir = Path(export_config.download_dir)
+    if not download_dir.is_absolute():
+        download_dir = _REPOSITORY_ROOT / download_dir
+    notion_publisher = (
+        NotionBriefingPublisher(export_config.notion_token) if export_config.notion_token else None
+    )
+    exporter = BriefingExportService(
+        repository,
+        FpdfBriefingRenderer(export_config.pdf_font_path),
+        download_dir,
+        notion_publisher=notion_publisher,
+        default_notion_parent_page_id=export_config.notion_parent_page_id,
+    )
+    return ToolDependencies(repository=repository, searcher=searcher, exporter=exporter)
 
 
 def create_server(dependencies: ToolDependencies) -> MCPServer:

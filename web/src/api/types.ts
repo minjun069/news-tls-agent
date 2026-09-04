@@ -96,7 +96,7 @@ export interface ChatTokenEvent {
 }
 
 export interface ExportResult {
-  format: string
+  format: 'pdf' | 'notion'
   file_name?: string
   download_url?: string
   page_id?: string
@@ -106,4 +106,39 @@ export interface ExportResult {
 export interface ChatDoneEvent {
   article_ids: number[]
   exports: ExportResult[]
+}
+
+export interface ExportRequest {
+  format: 'pdf' | 'notion'
+  parent_page_id?: string
+}
+
+export interface GraphNode {
+  id: number
+  name: string
+  type: string
+}
+
+export interface GraphEdge {
+  id: number
+  source: number
+  target: number
+  type: string
+}
+
+export interface ArticleGraph {
+  article_id: number
+  article_title: string
+  article_service_date: string
+  nodes: GraphNode[]
+  edges: GraphEdge[]
+}
+
+export interface GraphStageEvent {
+  stage: 'extracting'
+  remaining: number
+}
+
+export interface GraphDoneEvent {
+  graphs: ArticleGraph[]
 }

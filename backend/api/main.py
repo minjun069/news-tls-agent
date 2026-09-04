@@ -12,13 +12,17 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from api import deps, providers
 from api.routes.articles import router as articles_router
 from api.routes.chat import router as chat_router
+from api.routes.export import router as export_router
+from api.routes.graph import router as graph_router
 from api.routes.health import router as health_router
 from api.routes.issues import router as issues_router
-from core.config import load_api_config
+from app.exporting import resolve_download_dir
+from core.config import load_api_config, load_export_config
 
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 _DEFAULT_API_LOG = _REPOSITORY_ROOT / "logs" / "api.log"
@@ -44,7 +48,13 @@ def configure_logging() -> None:
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     configure_logging()
+    _download_directory().mkdir(parents=True, exist_ok=True)
     yield
+
+
+def _download_directory() -> Path:
+    config = load_export_config(os.environ)
+    return resolve_download_dir(config.download_dir, _REPOSITORY_ROOT)
 
 
 def create_app() -> FastAPI:
@@ -66,10 +76,18 @@ def create_app() -> FastAPI:
     application.dependency_overrides[providers.get_pipeline_factory] = deps.provide_pipeline_factory
     application.dependency_overrides[providers.get_tool_client] = deps.provide_tool_client
     application.dependency_overrides[providers.get_chat_agent] = deps.provide_chat_agent
+    application.dependency_overrides[providers.get_graph_factory] = deps.provide_graph_factory
     application.include_router(health_router)
     application.include_router(issues_router)
     application.include_router(articles_router)
     application.include_router(chat_router)
+    application.include_router(graph_router)
+    application.include_router(export_router)
+    application.mount(
+        "/downloads",
+        StaticFiles(directory=_download_directory(), check_dir=False),
+        name="downloads",
+    )
     return application
 
 

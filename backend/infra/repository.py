@@ -3,13 +3,18 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import UTC, datetime
 
-from sqlalchemy import func, select, text
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from core.models import (
     Article,
+    ArticleGraph,
+    ArticleGraphExtraction,
     EventArticle,
+    GraphEdge,
+    GraphNode,
     IssueCitation,
     IssueCreate,
     IssueDetail,
@@ -18,6 +23,8 @@ from core.models import (
 )
 from core.ranking import choose_representative
 from infra.entities import (
+    ArticleEntityRow,
+    ArticleRelationRow,
     ArticleRow,
     IssueEventArticleRow,
     IssueEventRow,
@@ -192,6 +199,84 @@ class SqlRepository:
             )
             for issue_row, event_row in rows
         ]
+
+    def replace_article_graph(
+        self,
+        article_id: int,
+        extraction: ArticleGraphExtraction,
+    ) -> None:
+        """기존 부분 데이터도 제거하고 한 기사 그래프를 원자적으로 확정한다."""
+        with self._session_factory.begin() as session:
+            article_row = session.scalar(
+                select(ArticleRow)
+                .where(ArticleRow.article_id == article_id)
+                .with_hint(ArticleRow, "WITH (UPDLOCK, ROWLOCK)", dialect_name="mssql")
+            )
+            if article_row is None:
+                raise LookupError(f"기사를 찾을 수 없습니다: {article_id}")
+
+            session.execute(
+                delete(ArticleRelationRow).where(ArticleRelationRow.article_id == article_id)
+            )
+            session.execute(
+                delete(ArticleEntityRow).where(ArticleEntityRow.article_id == article_id)
+            )
+            entity_rows = [
+                ArticleEntityRow(
+                    article_id=article_id,
+                    name=entity.name,
+                    entity_type=entity.entity_type,
+                )
+                for entity in extraction.entities
+            ]
+            session.add_all(entity_rows)
+            session.flush()
+            by_name = {row.name: row for row in entity_rows}
+            session.add_all(
+                ArticleRelationRow(
+                    article_id=article_id,
+                    source_entity_id=by_name[relation.source].entity_id,
+                    target_entity_id=by_name[relation.target].entity_id,
+                    relation_type=relation.relation_type,
+                )
+                for relation in extraction.relations
+            )
+            article_row.entities_extracted_at = datetime.now(UTC)
+            session.flush()
+
+    def get_article_graph(self, article_id: int) -> ArticleGraph | None:
+        with self._session_factory() as session:
+            article_row = session.get(ArticleRow, article_id)
+            if article_row is None:
+                return None
+            entity_rows = session.scalars(
+                select(ArticleEntityRow)
+                .where(ArticleEntityRow.article_id == article_id)
+                .order_by(ArticleEntityRow.entity_id)
+            ).all()
+            relation_rows = session.scalars(
+                select(ArticleRelationRow)
+                .where(ArticleRelationRow.article_id == article_id)
+                .order_by(ArticleRelationRow.relation_id)
+            ).all()
+        return ArticleGraph(
+            article_id=article_row.article_id,
+            article_title=article_row.title,
+            article_service_date=article_row.service_date,
+            nodes=tuple(
+                GraphNode(id=row.entity_id, name=row.name, type=row.entity_type)
+                for row in entity_rows
+            ),
+            edges=tuple(
+                GraphEdge(
+                    id=row.relation_id,
+                    source=row.source_entity_id,
+                    target=row.target_entity_id,
+                    type=row.relation_type,
+                )
+                for row in relation_rows
+            ),
+        )
 
     @staticmethod
     def _build_issue(session: Session, issue_row: IssueRow) -> IssueDetail:
