@@ -7,12 +7,13 @@ import json
 import logging
 import os
 import time
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
 from dotenv import load_dotenv
+from google.genai import errors as genai_errors
 
 from core.config import load_embedding_dimensions, load_gemini_config, load_qdrant_config
 from core.models import Article, VectorPoint
@@ -28,6 +29,10 @@ _DEFAULT_INITIAL_BACKOFF_SECONDS = 1.0
 _DEFAULT_MAX_BACKOFF_SECONDS = 60.0
 
 logger = logging.getLogger(__name__)
+
+
+class DailyEmbeddingQuotaExhaustedError(RuntimeError):
+    """Gemini의 일일 임베딩 한도가 소진돼 다음 배치를 처리할 수 없다."""
 
 
 class VectorBuildStore(Protocol):
@@ -137,6 +142,11 @@ def _retry[ResultT](
         try:
             return operation()
         except Exception as exc:
+            if _is_daily_embedding_quota_exhausted(exc):
+                raise DailyEmbeddingQuotaExhaustedError(
+                    "Gemini 일일 임베딩 한도가 소진됐습니다. "
+                    "사용 등급을 변경하거나 일일 한도 초기화 후 같은 명령을 재실행하세요."
+                ) from exc
             if attempt == policy.max_attempts:
                 raise
             logger.warning(
@@ -150,6 +160,33 @@ def _retry[ResultT](
             sleep(delay)
             delay = min(delay * 2 if delay > 0 else 0, policy.max_delay_seconds)
     raise RuntimeError("재시도 루프가 비정상 종료됐습니다")
+
+
+def _is_daily_embedding_quota_exhausted(exc: Exception) -> bool:
+    if not isinstance(exc, genai_errors.APIError) or exc.code != 429:
+        return False
+    details = exc.details
+    if not isinstance(details, Mapping):
+        return False
+    error = details.get("error", details)
+    if not isinstance(error, Mapping):
+        return False
+    quota_details = error.get("details", [])
+    if not isinstance(quota_details, list):
+        return False
+    for detail in quota_details:
+        if not isinstance(detail, Mapping):
+            continue
+        violations = detail.get("violations", [])
+        if not isinstance(violations, list):
+            continue
+        for violation in violations:
+            if not isinstance(violation, Mapping):
+                continue
+            quota_id = violation.get("quotaId", "")
+            if isinstance(quota_id, str) and "EmbedContentRequestsPerDay" in quota_id:
+                return True
+    return False
 
 
 def _point(article: Article, vector: tuple[float, ...] | None) -> VectorPoint:
@@ -230,6 +267,8 @@ def build_vector_index(
                     sleep,
                     "Gemini 문서 임베딩",
                 )
+            except DailyEmbeddingQuotaExhaustedError:
+                raise
             except Exception:
                 logger.exception(
                     "dense 임베딩 최종 실패, BM25만 적재: batch=%d count=%d",
@@ -326,19 +365,23 @@ def main() -> None:
         embedding_provider = GeminiEmbeddingProvider(gemini_config)
     store = QdrantVectorStore(qdrant_config)
     try:
-        report = build_vector_index(
-            args.inputs,
-            batch_size=args.batch_size,
-            vector_size=vector_size,
-            embedding_provider=embedding_provider,
-            store=store,
-            retry_policy=RetryPolicy(
-                max_attempts=args.max_attempts,
-                initial_delay_seconds=args.initial_backoff_seconds,
-                max_delay_seconds=args.max_backoff_seconds,
-            ),
-            resume=not args.force,
-        )
+        try:
+            report = build_vector_index(
+                args.inputs,
+                batch_size=args.batch_size,
+                vector_size=vector_size,
+                embedding_provider=embedding_provider,
+                store=store,
+                retry_policy=RetryPolicy(
+                    max_attempts=args.max_attempts,
+                    initial_delay_seconds=args.initial_backoff_seconds,
+                    max_delay_seconds=args.max_backoff_seconds,
+                ),
+                resume=not args.force,
+            )
+        except DailyEmbeddingQuotaExhaustedError as exc:
+            logger.log(logging.ERROR, "%s", exc)
+            raise SystemExit(3) from None
     finally:
         store.close()
     print(

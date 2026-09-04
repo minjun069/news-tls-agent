@@ -6,6 +6,7 @@ from datetime import date
 from pathlib import Path
 
 import pytest
+from google.genai.errors import ClientError
 
 from core.models import VectorPoint
 
@@ -43,6 +44,35 @@ class FakeEmbeddingProvider:
         return [(float(index), 0.5) for index, _text in enumerate(texts, start=1)]
 
     def embed_query(self, text):
+        raise NotImplementedError
+
+
+class DailyQuotaEmbeddingProvider:
+    def __init__(self) -> None:
+        self.call_count = 0
+
+    def embed_documents(self, _texts):
+        self.call_count += 1
+        raise ClientError(
+            429,
+            {
+                "error": {
+                    "details": [
+                        {
+                            "violations": [
+                                {
+                                    "quotaId": (
+                                        "EmbedContentRequestsPerDayPerUserPerProjectPerModel-FreeTier"
+                                    )
+                                }
+                            ]
+                        }
+                    ]
+                }
+            },
+        )
+
+    def embed_query(self, _text):
         raise NotImplementedError
 
 
@@ -223,3 +253,24 @@ def test_sparse_only_force_is_rejected_to_preserve_existing_dense(tmp_path: Path
             retry_policy=policy(),
             resume=False,
         )
+
+
+def test_daily_embedding_quota_stops_without_sparse_fallback(tmp_path: Path) -> None:
+    source = tmp_path / "raw.jsonl"
+    write_raw(source, [raw_article(1, "기사")])
+    provider = DailyQuotaEmbeddingProvider()
+    store = FakeStore()
+
+    with pytest.raises(builder.DailyEmbeddingQuotaExhaustedError):
+        builder.build_vector_index(
+            [source],
+            batch_size=1,
+            vector_size=2,
+            embedding_provider=provider,
+            store=store,
+            retry_policy=builder.RetryPolicy(7, 0, 0),
+            sleep=lambda _seconds: None,
+        )
+
+    assert store.upserted == []
+    assert provider.call_count == 1

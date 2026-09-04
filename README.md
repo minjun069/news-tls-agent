@@ -133,8 +133,10 @@ data/raw/*.jsonl
   → scripts/03_build_vectors.py → Qdrant
 ```
 
-현재 로컬 `articles` 컬렉션에는 실제 원본과 ID가 일치하는 BM25 포인트 178,887건이 있으며,
-전체 dense 적재와 semantic·hybrid 실데이터 비교가 끝나야 S3가 완료된다.
+현재 로컬 `articles` 컬렉션에는 실제 원본과 ID가 일치하는 BM25 포인트 178,887건과 dense
+포인트 900건이 있다. 전체 dense 적재와 semantic·hybrid 실데이터 비교가 끝나야 S3가 완료된다.
+현재 API 키의 무료 한도는 분당 100건·일일 1,000건이며, 전체 적재를 계속하려면 사용 등급 변경이
+필요하다.
 
 현 상태와 입력·제외·정합성 계약은
 [`docs/data/source-and-ingestion.md`](docs/data/source-and-ingestion.md) 및
