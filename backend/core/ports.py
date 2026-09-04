@@ -6,10 +6,13 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Protocol
+from typing import Protocol, TypeVar
+
+from pydantic import BaseModel
 
 from core.models import (
     Article,
+    ArticleSearchRequest,
     IssueCitation,
     IssueCreate,
     IssueDetail,
@@ -17,8 +20,11 @@ from core.models import (
     KeywordQuery,
     SearchHit,
     SearchOptions,
+    SearchResult,
     VectorPoint,
 )
+
+StructuredResponse = TypeVar("StructuredResponse", bound=BaseModel)
 
 
 class EmbeddingProvider(Protocol):
@@ -52,6 +58,22 @@ class VectorStore(Protocol):
         options: SearchOptions,
     ) -> list[SearchHit]:
         """기간을 먼저 제한한 뒤 dense 벡터 순위 결과를 반환한다."""
+        ...
+
+
+class PlannedArticleSearcher(Protocol):
+    def search_request(self, request: ArticleSearchRequest) -> SearchResult:
+        """P3가 선택한 방식별 입력과 기간을 그대로 실행한다."""
+        ...
+
+
+class StructuredGenerator(Protocol):
+    def generate(
+        self,
+        prompt: str,
+        response_type: type[StructuredResponse],
+    ) -> StructuredResponse:
+        """프롬프트 결과를 지정한 Pydantic 모델로 검증해 반환한다."""
         ...
 
 

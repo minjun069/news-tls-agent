@@ -33,6 +33,9 @@
     {
       "name": "AI pipeline and retrieval",
       "paths": [
+        ".env.example",
+        "backend/core/config.py",
+        "backend/core/errors.py",
         "backend/core/models.py",
         "backend/core/ports.py",
         "backend/core/ranking.py",
@@ -41,7 +44,9 @@
         "backend/app/search.py",
         "backend/infra/qdrant.py",
         "backend/infra/embedding.py",
-        "backend/scripts/03_build_vectors.py"
+        "backend/infra/gemini.py",
+        "backend/scripts/03_build_vectors.py",
+        "backend/scripts/04_generate_timeline.py"
       ],
       "docs": ["docs/ai/specification.md"]
     },

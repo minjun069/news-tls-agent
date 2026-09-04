@@ -78,8 +78,8 @@
 | DB 드라이버 | SQLAlchemy + pyodbc (ODBC Driver 18) | |
 | Vector DB | Qdrant | Docker 컨테이너 |
 | Search Engine | Qdrant BM25 · dense 벡터 · core RRF **3종 모두 구현** | 에이전트가 선택하거나 전부 수행 (NFR-04) |
-| AI | Google Gemini (`gemini-2.5-flash`) | 보유 키 기준 |
-| Embedding | Google `text-embedding-004` | 차원수는 착수 시 확인 |
+| AI | Google Gemini (`gemini-3.6-flash`) | 보유 키와 실제 API 가용성 기준 |
+| Embedding | Google `gemini-embedding-2` | 실제 API 기본 출력 3,072차원 확인 |
 | Agent | LangGraph `create_react_agent` | |
 | MCP | `mcp` v2 (`MCPServer`) + `langchain-mcp-adapters` | stdio 전송 |
 | PDF 생성 | 미정 | EXP-001 |
@@ -103,6 +103,12 @@
 - 우선순위: Should
 - 기준 조건: 시드 데이터 규모([PRD MVP 범위](../REQUIREMENTS.md#34-mvp-범위)), 외부 API 정상 응답
 - 관련: ISS-001
+
+수집 루프 기본 상한은 4라운드, 선후 이벤트 연쇄 깊이 2, 라운드당 검색 결과 20건이다. P1
+되묻기는 2회까지 허용한다. `TIMELINE_MAX_ROUNDS`, `TIMELINE_MAX_CHAIN_DEPTH`,
+`TIMELINE_SEARCH_TOP_K`, `TIMELINE_MAX_CLARIFICATIONS` 환경변수가 이 값을 덮어쓰며 모두 1
+이상이어야 한다. 기본값은 종료 조건 네 가지를 모의 LLM으로 각각 실행하는 단위 테스트의
+기준이기도 하다.
 
 #### NFR-02 · 조회 응답 시간
 이슈 목록 및 상세 조회는 1초 이내에 응답한다.

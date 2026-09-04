@@ -92,6 +92,7 @@ news-tls-agent/
 │  │  ├─ repository.py
 │  │  ├─ qdrant.py
 │  │  ├─ embedding.py
+│  │  ├─ gemini.py           구조화 출력 LLM 어댑터
 │  │  └─ mcp_client.py
 │  ├─ api/                   FastAPI HTTP 어댑터·조립
 │  │  ├─ main.py
@@ -101,7 +102,7 @@ news-tls-agent/
 │  │  ├─ server.py
 │  │  └─ tools/
 │  ├─ db/                    migrate.py·migrate.sh·schema.sql·migrations/
-│  ├─ scripts/               01_extract_seed·02_load_mssql·03_build_vectors
+│  ├─ scripts/               01_extract_seed·02_load_mssql·03_build_vectors·04_generate_timeline
 │  └─ tests/
 │     ├─ unit/               컨테이너 불필요
 │     └─ integration/        MS-SQL·Qdrant 필요

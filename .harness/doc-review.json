@@ -17,9 +17,15 @@
     },
     "source data and ingestion": {
       "files": {
-        "backend/core/models.py": "7668171c542c41bc3099744fd213c3188444336e3b0691969a15a75d93a30a6e"
+        "backend/core/models.py": "0e1c3cd77046685b0e348cd67fc2fc3ce3b09ff30a62a864441364d46f518ffa"
       },
-      "reason": "SqlRepository.list_issues는 schema.md §4.2의 기존 이슈 목록 질의를 구현하고, IssueSummary와 app/search.py는 source-and-ingestion.md의 적재 형식 및 ai/specification.md §4의 keyword·semantic·RRF 입력·출력 계약을 변경하지 않는다."
+      "reason": "backend/core/models.py의 S5 검색·생성·진행 모델 추가는 source-and-ingestion.md의 Article 원본·정규화 필드와 적재 상태 계약을 바꾸지 않으며, backend/pyproject.toml의 httpx 직접 의존성 명시는 Gemini 네트워크 예외를 기존 EX-03 재시도 경계로 변환하기 위한 것으로 validation.md의 make 명령과 검사 범위는 그대로다"
+    },
+    "validation and CI": {
+      "files": {
+        "backend/pyproject.toml": "2022951507962dd80f74630523dec3b86b8aa3f26d5d746475ca7c956595b1a7"
+      },
+      "reason": "backend/core/models.py의 S5 검색·생성·진행 모델 추가는 source-and-ingestion.md의 Article 원본·정규화 필드와 적재 상태 계약을 바꾸지 않으며, backend/pyproject.toml의 httpx 직접 의존성 명시는 Gemini 네트워크 예외를 기존 EX-03 재시도 경계로 변환하기 위한 것으로 validation.md의 make 명령과 검사 범위는 그대로다"
     }
   }
 }
