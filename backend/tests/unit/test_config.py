@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from core.config import ConfigError, load_settings
+from core.config import ConfigError, load_api_config, load_settings
 
 
 def required_env() -> dict[str, str]:
@@ -22,6 +22,7 @@ def test_s5_defaults_use_verified_models_and_loop_limits() -> None:
     assert settings.timeline.max_chain_depth == 2
     assert settings.timeline.max_clarifications == 2
     assert settings.timeline.search_top_k == 20
+    assert settings.api.cors_origins == ("http://localhost:5173",)
 
 
 def test_timeline_limits_must_be_positive_integers() -> None:
@@ -32,3 +33,11 @@ def test_timeline_limits_must_be_positive_integers() -> None:
     env = required_env() | {"TIMELINE_MAX_ROUNDS": "four"}
     with pytest.raises(ConfigError, match="정수"):
         load_settings(env)
+
+
+def test_api_origins_are_split_trimmed_and_deduplicated() -> None:
+    config = load_api_config(
+        {"CORS_ORIGINS": ("http://localhost:5173, https://example.com, http://localhost:5173")}
+    )
+
+    assert config.cors_origins == ("http://localhost:5173", "https://example.com")

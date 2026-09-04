@@ -100,10 +100,16 @@ Base URL: `http://localhost:8000`
 **Request**
 
 ```json
-{ "topic": "비상계엄 선포부터 해제까지", "clarification": null }
+{
+  "topic": "비상계엄 선포부터 해제까지",
+  "clarification": null,
+  "clarification_count": 0
+}
 ```
 
 되묻기에 답할 때는 `clarification`에 사용자 응답을 담아 다시 호출한다.
+`clarification_count`는 현재 요청 전에 받은 되묻기 횟수이며 0부터 시작한다. 서버가 대화
+세션을 저장하지 않으므로 클라이언트가 응답과 함께 횟수를 보관해 다음 요청에 보낸다.
 
 **Response** — `text/event-stream`
 
@@ -300,6 +306,8 @@ data: {"reason": "data_unavailable", "message": "자료를 불러오지 못했�
 ```
 
 데이터 접근 계층에 연결할 수 없으면 오류를 반환한다. 저장소 직접 접근으로 우회하지 않는다 (AC-013, EX-06).
+LLM 또는 에이전트 그래프 실행이 실패하면 `reason: "generation_failed"`, `retryable: true`를
+반환한다.
 
 ---
 

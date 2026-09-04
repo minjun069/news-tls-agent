@@ -135,6 +135,7 @@ def search_articles(query: str, ...) -> dict:
     "title": "긴급 대국민 담화",
     "sub_title": "",
     "service_date": "2024-12-03",
+    "summary": "...",
     "content": "...",
     "url": "https://...",
     "truncated": true
@@ -199,16 +200,26 @@ def search_articles(query: str, ...) -> dict:
     "topic": "...",
     "title": "...",
     "summary": "...",
+    "generated_at": "2026-08-21T14:23:11",
     "events": [
       { "event_order": 1, "event_date": "2024-12-03", "title": "...", "summary": "...",
-        "article_ids": [1234567, 1234890] }
+        "primary_article": {
+          "article_id": 1234567, "title": "...", "service_date": "2024-12-03"
+        },
+        "articles": [
+          { "article_id": 1234567, "title": "...", "service_date": "2024-12-03",
+            "relevance_score": 0.91 }
+        ] }
     ]
   },
   "message": "이벤트 7건을 포함한 이슈입니다."
 }
 ```
 
-이벤트는 `event_order` 오름차순이다. 기사 본문은 포함하지 않는다.
+이슈에는 `generated_at`이 포함된다. 이벤트는 `event_order` 오름차순이고 `articles`는
+`relevance_score` 내림차순이다. `primary_article`은 대표 기사 선정 정책을 적용한 결과다.
+기사 본문은 포함하지 않는다. API 서버가 이 구조화 결과를 HTTP 이슈 상세 응답으로 변환하므로
+저장소를 직접 조회하지 않는다.
 
 관련: ISS-005
 

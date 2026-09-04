@@ -167,6 +167,7 @@ def test_read_article_reports_truncation_and_missing_article() -> None:
 
     assert found["article"]["truncated"] is True
     assert len(found["article"]["content"]) == ARTICLE_CONTENT_LIMIT
+    assert found["article"]["summary"] == "요약 1"
     assert "일부만" in found["message"]
     assert missing == {
         "ok": False,
@@ -192,7 +193,17 @@ def test_list_and_get_issue_payloads_match_contract() -> None:
             "event_count": 1,
         }
     ]
-    assert detail["issue"]["events"][0]["article_ids"] == [1]
+    event = detail["issue"]["events"][0]
+    assert event["primary_article"]["article_id"] == 1
+    assert event["articles"] == [
+        {
+            "article_id": 1,
+            "title": "기사 1",
+            "service_date": "2025-04-01",
+            "relevance_score": 0.9,
+        }
+    ]
+    assert detail["issue"]["generated_at"] == "2026-08-21T14:23:11+00:00"
     assert get_issue_payload(repository, 99)["error"]["code"] == "ISSUE_NOT_FOUND"
 
 

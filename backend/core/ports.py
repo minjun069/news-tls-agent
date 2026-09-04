@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Protocol, TypeVar
 
 from pydantic import BaseModel
@@ -25,6 +25,7 @@ from core.models import (
 )
 
 StructuredResponse = TypeVar("StructuredResponse", bound=BaseModel)
+AgentTool = TypeVar("AgentTool")
 
 
 class EmbeddingProvider(Protocol):
@@ -74,6 +75,22 @@ class StructuredGenerator(Protocol):
         response_type: type[StructuredResponse],
     ) -> StructuredResponse:
         """프롬프트 결과를 지정한 Pydantic 모델로 검증해 반환한다."""
+        ...
+
+
+class ToolClient(Protocol[AgentTool]):
+    """MCP 도구를 에이전트와 HTTP 어댑터에 제공하는 비동기 포트."""
+
+    async def get_tools(self) -> Sequence[AgentTool]:
+        """MCP 스키마를 에이전트 프레임워크의 도구 목록으로 변환한다."""
+        ...
+
+    async def call_tool(
+        self,
+        name: str,
+        arguments: Mapping[str, object] | None = None,
+    ) -> Mapping[str, object]:
+        """이름과 구조화 인자로 MCP 도구를 호출한다."""
         ...
 
 
