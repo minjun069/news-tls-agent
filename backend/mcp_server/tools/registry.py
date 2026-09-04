@@ -168,7 +168,6 @@ def register_tools(server: MCPServer, dependencies: ToolDependencies) -> None:
             "export_briefing",
             arguments,
             lambda: export_briefing_payload(
-                dependencies.repository,
                 dependencies.exporter,
                 issue_id=issue_id,
                 output_format=format,

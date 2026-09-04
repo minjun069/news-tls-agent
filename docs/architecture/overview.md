@@ -82,9 +82,9 @@
 | Embedding | Google `gemini-embedding-2` | 실제 API 기본 출력 3,072차원 확인 |
 | Agent | LangGraph 기반 LangChain `create_agent` | MCP 도구 호출·토큰 스트리밍 |
 | MCP | `mcp` v2 (`MCPServer`, `ClientSession`) + LangChain 도구 브리지 | stdio 전송, [ADR-0006](../decisions/0006-mcp-v2-langchain-tool-bridge.md) |
-| PDF 생성 | 미정 | EXP-001 |
-| Notion 연동 | `notion-client` | EXP-002 |
-| 그래프 시각화 | 미정 (프론트 라이브러리) | GRPH-001 |
+| PDF 생성 | `fpdf2` + 환경별 한글 TTF 포함 | EXP-001 |
+| Notion 연동 | 공식 `notion-client` | EXP-002 |
+| 그래프 시각화 | Vue 네이티브 SVG 원형 배치 | GRPH-001 |
 | Authentication | 없음 | 단일 사용자 전제 |
 | Cache | 없음 | 이슈 재사용은 DB 조회로 처리 |
 | Queue | 없음 | 생성이 짧아 작업 큐 불필요 |
@@ -282,6 +282,12 @@ override로 `api/deps.py` 구현을 연결하고, `api/deps.py`만 `infra`를 im
 `TimelinePipeline`을 요청별 진행 sink와 함께 조립하며, 동기 파이프라인은 작업 스레드에서
 실행해 이벤트 루프가 SSE 진행 프레임을 계속 보낼 수 있게 한다.
 
+S8의 그래프 조회는 타임라인 생성과 같은 애플리케이션 파이프라인이다. `app/graph.py`가 대표
+기사의 본문을 P9에 전달하고 `core.ports.Repository`로 기사 단위 트랜잭션 저장을 요청한다.
+라우터는 저장소 구현을 import하지 않으며 `api/deps.py`만 구현을 주입한다. 반면 내보내기 메뉴는
+`export_briefing` MCP 툴을 호출한다. 따라서 대화 에이전트와 화면 메뉴가 모두 MCP 서버에서
+조립한 `app/exporting.py`의 같은 브리핑 구성·변환 유스케이스를 실행한다.
+
 ---
 
 ## 5. 구현 지침
@@ -316,6 +322,9 @@ PRD에서 다루지 않는 구현 수준의 규칙이다. 사용자가 겪는 �
 |---|---|
 | 진입점 | 화면 메뉴와 대화 두 가지. **두 경로가 같은 구현을 호출한다** |
 | 브리핑 구성 | 마크다운으로 먼저 만들고 형식별로 변환한다 |
+| PDF | `EXPORT_DOWNLOAD_DIR`에 원자적으로 교체 저장하고 `/downloads/{file}`로 제공한다 |
+| PDF 한글 글꼴 | `PDF_FONT_PATH` 또는 알려진 NanumGothic·맑은 고딕 경로의 TTF를 PDF에 포함한다 |
+| Notion | 요청의 `parent_page_id`를 우선하고 없으면 `NOTION_PARENT_PAGE_ID`를 사용한다 |
 
 ### 5.4 지식 그래프
 
@@ -325,6 +334,7 @@ PRD에서 다루지 않는 구현 수준의 규칙이다. 사용자가 겪는 �
 | 추출 대상 | 대표 기사 |
 | 추출 시점 | 그래프 조회 시. 미추출 기사가 있으면 그때 추출한다 |
 | 그래프 구성 | 기사별로 각각 구성한다 ([지식 그래프 요구사항](../requirements/knowledge-graph.md)) |
+| 화면 상한 | API는 전부 반환하고 화면은 기사당 노드 30개까지만 그리며 축소 사실을 표시한다 |
 
 ---
 

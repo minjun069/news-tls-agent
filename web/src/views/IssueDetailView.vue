@@ -5,6 +5,8 @@ import { getIssue } from '../api/client'
 import type { IssueDetail, TimelineEvent } from '../api/types'
 import { formatDate, formatDateTime } from '../utils/format'
 import ChatPanel from '../components/ChatPanel.vue'
+import ExportMenu from '../components/ExportMenu.vue'
+import KnowledgeGraphPanel from '../components/KnowledgeGraphPanel.vue'
 import MarkdownContent from '../components/MarkdownContent.vue'
 import TimelineEventPanel from '../components/TimelineEventPanel.vue'
 
@@ -83,8 +85,13 @@ watch(issueId, loadIssue, { immediate: true })
       </nav>
 
       <header class="issue-header">
-        <p class="eyebrow">Issue timeline · {{ issue.events.length }} events</p>
-        <h1>{{ issue.title }}</h1>
+        <div class="issue-header-top">
+          <div>
+            <p class="eyebrow">Issue timeline · {{ issue.events.length }} events</p>
+            <h1>{{ issue.title }}</h1>
+          </div>
+          <ExportMenu :issue-id="issue.issue_id" />
+        </div>
         <div class="issue-meta">
           <span>{{ issue.topic }}</span>
           <time :datetime="issue.generated_at">{{ formatDateTime(issue.generated_at) }} 생성</time>
@@ -132,6 +139,12 @@ watch(issueId, loadIssue, { immediate: true })
 
         <ChatPanel :issue-id="issue.issue_id" @open-article="focusArticle" />
       </div>
+
+      <KnowledgeGraphPanel
+        :issue-id="issue.issue_id"
+        :event-count="issue.events.length"
+        @open-article="focusArticle"
+      />
     </template>
   </main>
 </template>

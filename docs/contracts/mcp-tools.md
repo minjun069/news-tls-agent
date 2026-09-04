@@ -271,7 +271,7 @@ Notion
 미설정
 
 ```json
-{ "ok": false, "error": { "code": "EXPORT_NOT_CONFIGURED", "message": "내보내기 기능이 아직 설정되지 않았습니다." } }
+{ "ok": false, "error": { "code": "EXPORT_NOT_CONFIGURED", "message": "Notion 연결 설정이 필요합니다." } }
 ```
 
 ### 비고
@@ -280,8 +280,9 @@ Notion
 
 화면 메뉴 경로(`POST /issues/{id}/export`)와 **같은 구현**을 호출한다.
 
-S4에서는 툴과 주입 포트까지만 제공하고 PDF·Notion 변환 구현은 S8에서 연결한다. 변환 구현이
-주입되기 전 호출은 프로토콜 오류를 던지지 않고 `EXPORT_NOT_CONFIGURED`를 반환한다.
+S8에서는 브리핑 마크다운 구성 뒤 PDF 또는 Notion 어댑터로 변환하는 공용 유스케이스가 주입된다.
+화면 메뉴도 이 MCP 툴을 호출한다. Notion 토큰·상위 페이지 또는 PDF 한글 글꼴이 없으면
+프로토콜 오류를 던지지 않고 `EXPORT_NOT_CONFIGURED`를 반환한다.
 
 관련: CHAT-006, AC-015, AC-016, EXP-001, EXP-002, [ADR-0004](../decisions/0004-export-intent-via-tool.md)
 

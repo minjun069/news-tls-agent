@@ -9,8 +9,12 @@ import type {
   GenerationDone,
   GenerationRequest,
   GenerationStage,
+  GraphDoneEvent,
+  GraphStageEvent,
   IssueDetail,
   IssueSummary,
+  ExportRequest,
+  ExportResult,
   StreamError,
 } from './types'
 
@@ -45,6 +49,20 @@ async function errorMessage(response: Response): Promise<string> {
 async function requestJson<T>(path: string, signal?: AbortSignal): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     headers: { Accept: 'application/json' },
+    signal,
+  })
+  if (!response.ok) throw new ApiError(await errorMessage(response), response.status)
+  return (await response.json()) as T
+}
+
+async function postJson<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
     signal,
   })
   if (!response.ok) throw new ApiError(await errorMessage(response), response.status)
@@ -143,6 +161,44 @@ export function chatWithIssue(
     },
     signal,
   )
+}
+
+export function exportIssue(
+  issueId: number,
+  request: ExportRequest,
+  signal?: AbortSignal,
+): Promise<ExportResult> {
+  return postJson<ExportResult>(`/issues/${issueId}/export`, request, signal)
+}
+
+interface GraphHandlers {
+  stage: (payload: GraphStageEvent) => void
+  done: (payload: GraphDoneEvent) => void
+  error: (payload: StreamError) => void
+}
+
+export async function streamIssueGraph(
+  issueId: number,
+  handlers: GraphHandlers,
+  signal?: AbortSignal,
+): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/issues/${issueId}/graph`, {
+    headers: { Accept: 'text/event-stream' },
+    signal,
+  })
+  if (!response.ok) throw new ApiError(await errorMessage(response), response.status)
+  await consumeEventStream(response, ({ event, data }) => {
+    let payload: unknown
+    try {
+      payload = JSON.parse(data)
+    } catch {
+      throw new ApiError('서버의 그래프 응답을 해석하지 못했습니다.', 502)
+    }
+    if (!isRecord(payload)) throw new ApiError('서버 응답 형식이 올바르지 않습니다.', 502)
+    if (event === 'stage') handlers.stage(payload as unknown as GraphStageEvent)
+    if (event === 'done') handlers.done(payload as unknown as GraphDoneEvent)
+    if (event === 'error') handlers.error(payload as unknown as StreamError)
+  })
 }
 
 export function resolveApiUrl(path: string): string {

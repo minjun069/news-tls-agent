@@ -24,7 +24,7 @@ class ArticleSearcher(Protocol):
 
 
 class BriefingExporter(Protocol):
-    """S8에서 PDF·Notion 구현이 채울 내보내기 계약."""
+    """화면 메뉴와 MCP 도구가 함께 사용하는 내보내기 계약."""
 
     def export_briefing(
         self,

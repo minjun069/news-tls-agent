@@ -8,6 +8,7 @@ from typing import Literal, cast
 
 from pydantic import ValidationError
 
+from core.errors import ExportNotConfiguredError, IssueNotFoundError
 from core.models import SearchMethod, SearchOptions
 from core.ports import Repository
 from mcp_server.tools.dependencies import ArticleSearcher, BriefingExporter
@@ -182,22 +183,15 @@ def get_issue_payload(repository: Repository, issue_id: int) -> dict[str, object
 
 
 def export_briefing_payload(
-    repository: Repository,
     exporter: BriefingExporter | None,
     *,
     issue_id: int,
     output_format: str,
     parent_page_id: str | None = None,
 ) -> dict[str, object]:
-    """이슈 존재 여부와 구현 설정을 확인한 뒤 공용 내보내기 유스케이스를 호출한다."""
+    """공용 내보내기 유스케이스의 결과와 오류를 MCP 규약으로 바꾼다."""
     if output_format not in {"pdf", "notion"}:
         return _error("INVALID_ARGUMENT", "format은 pdf 또는 notion이어야 합니다.")
-    try:
-        issue = repository.get_issue(issue_id)
-    except Exception as exc:  # noqa: BLE001 - 저장소 예외를 MCP 오류 규약으로 변환
-        return _storage_unavailable("export_briefing", exc)
-    if issue is None:
-        return _error("ISSUE_NOT_FOUND", "해당 이슈를 찾을 수 없습니다.")
     if exporter is None:
         return _error("EXPORT_NOT_CONFIGURED", "내보내기 기능이 아직 설정되지 않았습니다.")
 
@@ -210,6 +204,10 @@ def export_briefing_payload(
                 parent_page_id,
             )
         )
+    except IssueNotFoundError:
+        return _error("ISSUE_NOT_FOUND", "해당 이슈를 찾을 수 없습니다.")
+    except ExportNotConfiguredError as exc:
+        return _error("EXPORT_NOT_CONFIGURED", str(exc))
     except Exception:
         logger.exception("MCP payload 내보내기 실패: format=%s", output_format)
         return _error("STORAGE_UNAVAILABLE", "브리핑을 내보내지 못했습니다.")

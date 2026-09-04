@@ -295,25 +295,30 @@ make mcp-inspect
 |---|---|
 
 ### S8-1 지식 그래프
-- [ ] P9 엔티티·관계 추출 ([`AI_SPEC.md`](../ai/specification.md) §2.10)
-- [ ] `articles.entities_extracted_at` 기반 추출 여부 판정
-- [ ] 기사 1건 단위 트랜잭션 저장
-- [ ] `GET /issues/{id}/graph` — SSE 추출 진행 + 기사별 그래프 반환
-- [ ] 프론트 그래프 시각화 — **기사별 분리 표시**
+- [x] P9 엔티티·관계 추출 ([`AI_SPEC.md`](../ai/specification.md) §2.10)
+- [x] `articles.entities_extracted_at` 기반 추출 여부 판정
+- [x] 기사 1건 단위 트랜잭션 저장
+- [x] `GET /issues/{id}/graph` — SSE 추출 진행 + 기사별 그래프 반환
+- [x] 프론트 그래프 시각화 — **기사별 분리 표시**
 
 ### S8-2 내보내기
-- [ ] 브리핑 마크다운 구성
-- [ ] PDF 변환
-- [ ] Notion 저장
-- [ ] `POST /issues/{id}/export`
-- [ ] MCP `export_briefing` 툴 — 대화 경로 (CHAT-006)
-- [ ] 화면 메뉴와 대화가 **같은 구현**을 호출하는지 확인
+- [x] 브리핑 마크다운 구성
+- [x] PDF 변환
+- [x] Notion 저장
+- [x] `POST /issues/{id}/export`
+- [x] MCP `export_briefing` 툴 — 대화 경로 (CHAT-006)
+- [x] 화면 메뉴와 대화가 **같은 구현**을 호출하는지 확인
 
 **완료 기준**
 - 기사별 그래프가 출처와 함께 표시됨
 - 모든 노드·간선에서 출처 기사를 역추적 가능 (NFR-16)
 - 화면 메뉴와 대화 양쪽에서 PDF·Notion 내보내기 동작
 - 형식 미지정 시 되물음 (AC-016)
+
+`app/exporting.py`가 이슈 전체를 마크다운으로 한 번 구성하고 PDF·Notion 어댑터에 전달한다.
+HTTP 메뉴도 MCP `export_briefing`을 호출하므로 대화 도구와 구현이 갈라지지 않는다. PDF는
+`fpdf2`로 한글 TTF를 포함하고, 그래프 화면은 추가 런타임 의존성 없이 기사별 SVG를 그린다.
+기사당 노드가 30개를 넘으면 API 원본은 유지한 채 화면만 줄이고 그 사실을 표시한다.
 
 ---
 

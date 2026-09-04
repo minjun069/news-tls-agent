@@ -11,8 +11,9 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from qdrant_client import QdrantClient
 from sqlalchemy.engine import Engine
 
-from api.providers import HealthChecker, PipelineFactory
+from api.providers import GraphFactory, HealthChecker, PipelineFactory
 from app.agent import IssueChatAgent
+from app.graph import GraphProgressSink, KnowledgeGraphService
 from app.pipeline import ProgressSink, TimelinePipeline
 from app.search import ArticleSearchService
 from core.config import Settings, load_settings
@@ -96,6 +97,17 @@ def _chat_agent() -> IssueChatAgent:
 
 async def provide_chat_agent() -> IssueChatAgent:
     return _chat_agent()
+
+
+async def provide_graph_factory() -> GraphFactory:
+    def build(progress_sink: GraphProgressSink) -> KnowledgeGraphService:
+        return KnowledgeGraphService(
+            _repository(),
+            _generator(),
+            progress_sink=progress_sink,
+        )
+
+    return build
 
 
 class DefaultHealthChecker:

@@ -42,9 +42,9 @@
     },
     "validation and CI": {
       "files": {
-        "backend/pyproject.toml": "2022951507962dd80f74630523dec3b86b8aa3f26d5d746475ca7c956595b1a7"
+        "backend/pyproject.toml": "4d66b43044f38937914593d8720f5fe5d594eee72e29bf34f5c85a831f4c0c8d"
       },
-      "reason": "backend/core/models.py의 S5 검색·생성·진행 모델 추가는 source-and-ingestion.md의 Article 원본·정규화 필드와 적재 상태 계약을 바꾸지 않으며, backend/pyproject.toml의 httpx 직접 의존성 명시는 Gemini 네트워크 예외를 기존 EX-03 재시도 경계로 변환하기 위한 것으로 validation.md의 make 명령과 검사 범위는 그대로다"
+      "reason": "backend/pyproject.toml에는 S8 런타임 변환 라이브러리 fpdf2와 notion-client만 추가했으며 make install·lint·arch·test·check의 검증 명령과 범위는 그대로다"
     }
   }
 }

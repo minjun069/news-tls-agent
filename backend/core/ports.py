@@ -12,12 +12,15 @@ from pydantic import BaseModel
 
 from core.models import (
     Article,
+    ArticleGraph,
+    ArticleGraphExtraction,
     ArticleSearchRequest,
     IssueCitation,
     IssueCreate,
     IssueDetail,
     IssueSummary,
     KeywordQuery,
+    NotionPage,
     SearchHit,
     SearchOptions,
     SearchResult,
@@ -78,6 +81,18 @@ class StructuredGenerator(Protocol):
         ...
 
 
+class PdfRenderer(Protocol):
+    def render(self, markdown: str, output_path: str) -> None:
+        """브리핑 마크다운을 한글 글꼴이 포함된 PDF 파일로 원자적으로 쓴다."""
+        ...
+
+
+class NotionPublisher(Protocol):
+    def publish(self, title: str, markdown: str, parent_page_id: str) -> NotionPage:
+        """지정 상위 페이지 아래에 브리핑 페이지를 만들고 식별자와 URL을 반환한다."""
+        ...
+
+
 class ToolClient(Protocol[AgentTool]):
     """MCP 도구를 에이전트와 HTTP 어댑터에 제공하는 비동기 포트."""
 
@@ -125,4 +140,16 @@ class Repository(Protocol):
 
     def find_issues_by_article(self, article_id: int) -> list[IssueCitation]:
         """특정 기사를 인용한 이슈·이벤트를 역방향으로 조회한다."""
+        ...
+
+    def replace_article_graph(
+        self,
+        article_id: int,
+        extraction: ArticleGraphExtraction,
+    ) -> None:
+        """기사 엔티티·관계·추출 완료 시각을 한 트랜잭션으로 교체한다."""
+        ...
+
+    def get_article_graph(self, article_id: int) -> ArticleGraph | None:
+        """기사 메타데이터와 저장된 노드·간선을 함께 반환한다."""
         ...

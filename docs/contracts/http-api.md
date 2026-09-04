@@ -341,7 +341,11 @@ LLM 또는 에이전트 그래프 실행이 실패하면 `reason: "generation_fa
 { "reason": "notion_not_configured", "message": "Notion 연결 설정이 필요합니다." }
 ```
 
-화면 메뉴와 대화 두 진입점이 같은 구현을 호출한다 ([아키텍처 구현 지침](../architecture/overview.md#5-구현-지침)).
+PDF 한글 글꼴을 찾지 못하면 `reason: "pdf_not_configured"`와 `PDF_FONT_PATH` 설정 안내를
+같은 400 응답으로 반환한다.
+
+화면 메뉴도 MCP `export_briefing`을 호출하므로 대화와 같은 브리핑 구성·변환 구현을 실행한다
+([아키텍처 구현 지침](../architecture/overview.md#5-구현-지침)).
 
 ---
 
@@ -361,6 +365,7 @@ data: {
     {
       "article_id": 1234567,
       "article_title": "긴급 대국민 담화",
+      "article_service_date": "2024-12-03",
       "nodes": [
         { "id": 11, "name": "윤석열 대통령", "type": "인물" },
         { "id": 12, "name": "계엄사령부", "type": "기관" }
@@ -380,8 +385,11 @@ data: {
 
 ```
 event: error
-data: {"reason": "insufficient_events", "message": "그래프를 표시할 만큼 이벤트가 충분하지 않습니다."}
+data: {"reason": "insufficient_events", "message": "그래프를 표시할 만큼 이벤트가 충분하지 않습니다.", "retryable": false}
 ```
+
+P9 호출이나 기사 단위 저장에 실패하면 `reason: "extraction_failed"`, `retryable: true`를
+반환한다. 외부 API 호출 한도 초과는 `reason: "rate_limited"`로 구분한다.
 
 ---
 
