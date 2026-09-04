@@ -4,7 +4,33 @@
 #   docker compose --profile full up -d   모드 B — 전부 (클린 클론 검증·데모, NFR-13)
 #
 # 모드 A에서 MS-SQL은 네이티브 설치를 쓴다 (ADR-0002). 여기 mssql은
-# 모드 B·C 전용이며, 배포 형태에 대한 결정을 바꾸지 않는다.
+# 모드 B 전용이며, CI의 서비스 컨테이너는 workflow가 별도로 정의한다.
+
+x-backend-environment: &backend-environment
+  GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+  GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.6-flash}
+  GEMINI_EMBEDDING_MODEL: ${GEMINI_EMBEDDING_MODEL:-gemini-embedding-2}
+  TIMELINE_MAX_ROUNDS: ${TIMELINE_MAX_ROUNDS:-4}
+  TIMELINE_MAX_CHAIN_DEPTH: ${TIMELINE_MAX_CHAIN_DEPTH:-2}
+  TIMELINE_MAX_CLARIFICATIONS: ${TIMELINE_MAX_CLARIFICATIONS:-2}
+  TIMELINE_SEARCH_TOP_K: ${TIMELINE_SEARCH_TOP_K:-20}
+  CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+  MSSQL_HOST: mssql
+  MSSQL_PORT: "1433"
+  MSSQL_DB: ${MSSQL_DB:-newsagent}
+  MSSQL_USER: sa
+  MSSQL_PASSWORD: ${MSSQL_PASSWORD:-}
+  MSSQL_DRIVER: ODBC Driver 18 for SQL Server
+  MSSQL_TRUST_CERT: "yes"
+  MSSQL_COLLATION: ${MSSQL_COLLATION:-Korean_Wansung_CI_AS}
+  QDRANT_URL: http://qdrant:6333
+  QDRANT_COLLECTION: ${QDRANT_COLLECTION:-articles}
+  API_LOG: /app/logs/api.log
+  MCP_AUDIT_LOG: /app/logs/mcp-audit.log
+  EXPORT_DOWNLOAD_DIR: /app/downloads
+  PDF_FONT_PATH: ${PDF_FONT_PATH:-/usr/share/fonts/truetype/nanum/NanumGothic.ttf}
+  NOTION_TOKEN: ${NOTION_TOKEN:-}
+  NOTION_PARENT_PAGE_ID: ${NOTION_PARENT_PAGE_ID:-}
 
 services:
   # ── 항상 뜬다 ───────────────────────────────────────────────
@@ -16,6 +42,12 @@ services:
       - "6334:6334" # gRPC
     volumes:
       - qdrant-data:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333'"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
     restart: unless-stopped
 
   # ── profile: full ──────────────────────────────────────────
@@ -48,9 +80,73 @@ services:
       start_period: 30s
     restart: unless-stopped
 
-  # api · mcp · web은 각각 S6 · S4 · S7에서 추가한다.
-  # docs/engineering/roadmap.md 참조. Dockerfile이 생기기 전에는 정의하지 않는다.
+  migrate:
+    profiles: ["full"]
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      target: migrate
+    environment: *backend-environment
+    depends_on:
+      mssql:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    profiles: ["full"]
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      target: api
+    environment: *backend-environment
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      qdrant:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    volumes:
+      - downloads-data:/app/downloads
+      - logs-data:/app/logs
+    restart: unless-stopped
+
+  # stdio 서버 이미지를 독립 실행·Inspector 연결용으로 함께 기동한다. API는 같은 이미지의
+  # 모듈을 자식 프로세스로 실행해 stdio 경계를 유지한다 (ADR-0007).
+  mcp:
+    profiles: ["full"]
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      target: mcp
+    environment: *backend-environment
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      qdrant:
+        condition: service_healthy
+    stdin_open: true
+    volumes:
+      - downloads-data:/app/downloads
+      - logs-data:/app/logs
+    restart: unless-stopped
+
+  web:
+    profiles: ["full"]
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "5173:80"
+    restart: unless-stopped
 
 volumes:
   qdrant-data:
   mssql-data:
+  downloads-data:
+  logs-data:
