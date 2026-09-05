@@ -15,7 +15,7 @@ from app.search import ArticleSearchService
 from core.config import load_settings
 from core.models import GenerationStatus, PipelineProgress
 from infra.db import create_db_engine, create_session_factory
-from infra.embedding import GeminiEmbeddingProvider
+from infra.embedding import create_embedding_provider
 from infra.gemini import GeminiStructuredGenerator
 from infra.qdrant import QdrantVectorStore
 from infra.repository import SqlRepository
@@ -59,7 +59,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     engine = create_db_engine(settings.mssql)
     repository = SqlRepository(create_session_factory(engine))
     vector_store = QdrantVectorStore(settings.qdrant)
-    embedding = GeminiEmbeddingProvider(settings.gemini)
+    embedding = create_embedding_provider(settings.embedding, settings.gemini)
     searcher = ArticleSearchService(vector_store, vector_store, embedding)
     generator = GeminiStructuredGenerator(settings.gemini)
     pipeline = TimelinePipeline(

@@ -22,8 +22,10 @@ S3의 목표는 BM25 키워드 검색, Qdrant 의미 검색, RRF(Reciprocal Rank
 - `backend/scripts/03_build_vectors.py`는 실제 원본 스트리밍, 배치 임베딩, 재시도, 재개 적재,
   전체 ID 대조를 구현한다.
 - 로컬 Qdrant에는 178,887건의 BM25 포인트가 적재됐고 원본과 누락·초과 ID가 없음을 확인했다.
-- 기사 본문의 외부 API 전송 승인을 받아 dense 900건을 적재했다. 현재 API 키의 무료 한도는
-  분당 100건·일일 1,000건이고 무료 등급에서는 Batch API를 사용할 수 없어 전체 적재가 중단됐다.
+- 기존 `articles`에 Gemini dense 900건을 보존한다. 무료 한도로 전체 적재가 불가능해 KURE-v1과
+  Qwen3-Embedding-0.6B를 CPU 표본 측정했고, KURE-v1 1,024차원·256토큰·정규화를 선택했다.
+- 별도 `articles_kure_smoke` 32건에서 로컬 dense·BM25 적재와 MCP 세 방식 검색을 확인했다.
+  전체 `articles_kure_v1` 적재와 실데이터 비교는 아직 남아 있다.
 
 ## 2. 전체 의존 순서
 
@@ -106,7 +108,7 @@ ADR-0003에서 제외한 검색기별 가중치와 `k` 튜닝은 추가하지 �
 |---|---|
 | 관련 | NFR-04, NFR-05 |
 | 산출물 | `backend/infra/qdrant.py`, `backend/infra/embedding.py`, 단위 테스트, 의존성·설정 |
-| 상태 | 완료 — Qdrant 1.19.x·Google Gen AI 어댑터와 모의 SDK 검증 반영 |
+| 상태 | 완료 — Qdrant 1.19.x·Gemini·로컬 KURE 어댑터와 모의 SDK 검증 반영 |
 | 권장 모델 | `gpt-5.6-terra` |
 | 추론 수준 | `high` |
 
@@ -124,6 +126,9 @@ ADR-0003에서 제외한 검색기별 가중치와 `k` 튜닝은 추가하지 �
 현재 지원되는 안정 모델 `gemini-embedding-2`는 문서와 질의를 접두 형식으로 구분한다. 별도
 `Content` 객체 두 건을 한 배치로 보낸 실호출에서 3,072차원 벡터 두 건이 반환됐다. Qdrant
 컬렉션은 `GEMINI_EMBEDDING_DIMENSIONS` 차원으로 생성하며 기존 컬렉션 구성도 같은 값으로 검사한다.
+
+이후 [ADR-0008](../decisions/0008-local-kure-embedding.md)이 dense 기본 공급자 결정을 대체했다.
+공용 `EmbeddingProvider` 포트는 유지하고 설정 조립점에서 KURE-v1과 Gemini를 선택한다.
 
 ### 병렬 기간의 명시적 제외 범위
 
@@ -170,7 +175,7 @@ tokenizer, OR·AND 조합, 기간 선필터가 계약대로 동작하는지 검�
 | 항목 | 내용 |
 |---|---|
 | 산출물 | `backend/scripts/03_build_vectors.py`, 실제 Qdrant `articles` 컬렉션 |
-| 상태 | 구현 완료·실행 일부 완료 — BM25 178,887건·dense 900건 완료, API 사용 등급 변경 대기 |
+| 상태 | 구현 완료·로컬 표본 검증 완료 — 별도 컬렉션 전체 KURE dense 적재 진행 전 |
 | 권장 모델 | `gpt-5.6-terra` |
 | 추론 수준 | `high` |
 

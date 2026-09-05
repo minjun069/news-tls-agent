@@ -1,4 +1,4 @@
-"""원본 JSONL을 Gemini로 임베딩하고 Qdrant articles 컬렉션에 적재한다."""
+"""원본 JSONL을 선택한 공급자로 임베딩하고 Qdrant 컬렉션에 적재한다."""
 
 from __future__ import annotations
 
@@ -15,10 +15,10 @@ from typing import Protocol
 from dotenv import load_dotenv
 from google.genai import errors as genai_errors
 
-from core.config import load_embedding_dimensions, load_gemini_config, load_qdrant_config
+from core.config import load_embedding_config, load_gemini_config, load_qdrant_config
 from core.models import Article, VectorPoint
 from core.ports import EmbeddingProvider
-from infra.embedding import GeminiEmbeddingProvider
+from infra.embedding import create_embedding_provider
 from infra.qdrant import QdrantVectorStore
 from scripts.raw_ingestion import RawIngestionStats, RawValidationReport, iter_valid_articles
 
@@ -265,7 +265,7 @@ def build_vector_index(
                     ),
                     retry_policy,
                     sleep,
-                    "Gemini 문서 임베딩",
+                    "문서 임베딩",
                 )
             except DailyEmbeddingQuotaExhaustedError:
                 raise
@@ -358,11 +358,14 @@ def main() -> None:
     args = _parse_args()
     load_dotenv(_REPO_ROOT / ".env")
     qdrant_config = load_qdrant_config(os.environ)
-    vector_size = load_embedding_dimensions(os.environ)
+    embedding_config = load_embedding_config(os.environ)
+    vector_size = embedding_config.dimensions
     embedding_provider: EmbeddingProvider | None = None
     if not args.sparse_only:
-        gemini_config = load_gemini_config(os.environ)
-        embedding_provider = GeminiEmbeddingProvider(gemini_config)
+        gemini_config = (
+            load_gemini_config(os.environ) if embedding_config.provider == "gemini" else None
+        )
+        embedding_provider = create_embedding_provider(embedding_config, gemini_config)
     store = QdrantVectorStore(qdrant_config)
     try:
         try:

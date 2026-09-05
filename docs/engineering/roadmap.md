@@ -114,7 +114,7 @@ S2의 운영 경로는 토픽별 후보를 만들지 않는다. `01_validate_raw
 - [x] `core/models.py`·`core/ports.py` — 검색 계약과 BM25 구현 위치 결정 (S3-P1)
 - [ ] Qdrant `articles` 컬렉션 생성 (`dense` Cosine + `bm25` sparse, payload 4종)
 - [x] `scripts/03_build_vectors.py` — 원본 직접 임베딩 적재, 배치·재시도·재개·ID 대조
-- [x] `infra/qdrant.py`·`infra/embedding.py` — 모의 SDK 단위 검증 (S3-P3)
+- [x] `infra/qdrant.py`·`infra/embedding.py` — Gemini·로컬 KURE 공급자와 모의 SDK 단위 검증 (S3-P3)
 - [x] `core/ranking.py` — RRF 결합 (순수 계산, S3-P2)
 - [x] `app/search.py` — 3종 검색 유스케이스
 - [x] 기간 필터를 검색 단계에서 적용하는 요청 구현·모의 검증 (S3-P3)
@@ -124,10 +124,10 @@ S2의 운영 경로는 토픽별 후보를 만들지 않는다. `01_validate_raw
 - [ ] 실제 원본에서 세 방식이 각각 호출 가능하고 결과가 다름
 - [x] 기간 필터가 검색 단계에서 적용됨 — 실제 BM25·임시 dense 통합 검사
 
-> 실제 원본 178,887건의 BM25 포인트와 payload 적재, 원본-Qdrant 전체 ID 일치, 같은 원본의
-> 재실행 후 포인트 수 유지, MCP 기간 검색과 MS-SQL 기사 복원은 확인했다. dense는 900건까지
-> 적재됐고 현재 API 키의 무료 한도(분당 100건·일일 1,000건)에서 중단됐다. S3 종료에는 API 사용
-> 등급 변경 뒤 전체 dense 임베딩과 semantic·hybrid 실데이터 비교가 남아 있다.
+> 기존 `articles`에는 실제 원본 178,887건의 BM25와 Gemini dense 900건을 보존한다. 무료 한도를
+> 피하기 위해 CPU 표본 실측으로 로컬 KURE-v1을 선택했고, 별도 임시 컬렉션 32건에서 dense·BM25
+> 적재와 MCP 세 방식 검색을 확인했다. S3 종료에는 `articles_kure_v1` 전체 dense 적재와 원본 ID
+> 대조, semantic·hybrid 실데이터 비교가 남아 있다 ([ADR-0008](../decisions/0008-local-kure-embedding.md)).
 
 ---
 

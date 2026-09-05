@@ -9,8 +9,18 @@
 x-backend-environment: &backend-environment
   GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
   GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.6-flash}
+  EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-local}
   GEMINI_EMBEDDING_MODEL: ${GEMINI_EMBEDDING_MODEL:-gemini-embedding-2}
   GEMINI_EMBEDDING_DIMENSIONS: ${GEMINI_EMBEDDING_DIMENSIONS:-3072}
+  LOCAL_EMBEDDING_MODEL: ${LOCAL_EMBEDDING_MODEL:-nlpai-lab/KURE-v1}
+  LOCAL_EMBEDDING_DIMENSIONS: ${LOCAL_EMBEDDING_DIMENSIONS:-1024}
+  LOCAL_EMBEDDING_NORMALIZE: ${LOCAL_EMBEDDING_NORMALIZE:-true}
+  LOCAL_EMBEDDING_MAX_SEQ_LENGTH: ${LOCAL_EMBEDDING_MAX_SEQ_LENGTH:-256}
+  LOCAL_EMBEDDING_BATCH_SIZE: ${LOCAL_EMBEDDING_BATCH_SIZE:-4}
+  LOCAL_EMBEDDING_DEVICE: ${LOCAL_EMBEDDING_DEVICE:-cpu}
+  LOCAL_EMBEDDING_THREADS: ${LOCAL_EMBEDDING_THREADS:-10}
+  LOCAL_EMBEDDING_QUERY_PROMPT: ${LOCAL_EMBEDDING_QUERY_PROMPT:-}
+  HF_HOME: /app/models
   TIMELINE_MAX_ROUNDS: ${TIMELINE_MAX_ROUNDS:-4}
   TIMELINE_MAX_CHAIN_DEPTH: ${TIMELINE_MAX_CHAIN_DEPTH:-2}
   TIMELINE_MAX_CLARIFICATIONS: ${TIMELINE_MAX_CLARIFICATIONS:-2}
@@ -25,7 +35,7 @@ x-backend-environment: &backend-environment
   MSSQL_TRUST_CERT: "yes"
   MSSQL_COLLATION: ${MSSQL_COLLATION:-Korean_Wansung_CI_AS}
   QDRANT_URL: http://qdrant:6333
-  QDRANT_COLLECTION: ${QDRANT_COLLECTION:-articles}
+  QDRANT_COLLECTION: ${QDRANT_COLLECTION:-articles_kure_v1}
   API_LOG: /app/logs/api.log
   MCP_AUDIT_LOG: /app/logs/mcp-audit.log
   EXPORT_DOWNLOAD_DIR: /app/downloads
@@ -110,6 +120,7 @@ services:
     volumes:
       - downloads-data:/app/downloads
       - logs-data:/app/logs
+      - embedding-models:/app/models
     restart: unless-stopped
 
   # stdio 서버 이미지를 독립 실행·Inspector 연결용으로 함께 기동한다. API는 같은 이미지의
@@ -130,6 +141,7 @@ services:
     volumes:
       - downloads-data:/app/downloads
       - logs-data:/app/logs
+      - embedding-models:/app/models
     restart: unless-stopped
 
   web:
@@ -151,3 +163,4 @@ volumes:
   mssql-data:
   downloads-data:
   logs-data:
+  embedding-models:

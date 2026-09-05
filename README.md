@@ -119,10 +119,10 @@ make mcp-inspect
 
 서비스 기동과 뉴스 적재는 별도다. 실제 원본 `news.jsonl` 필드(`article_title`,
 `article_service_daytime`, `text` 등)를 검증·정규화해 MS-SQL에 직접 배치 적재하는 S2 경로는
-완료됐다. `scripts/03_build_vectors.py`는 같은 원본을 스트리밍해 Gemini dense와 Qdrant BM25를
-배치 적재하고, 재시도·재개·전체 ID 대조 결과를 JSON으로 출력한다. 전체 dense 적재 명령은 기사
-제목·요약·본문을 Google Gemini API로 전송하므로 데이터 외부 전송 권한과 API 한도를 먼저
-확인한다. 외부 전송 없이 BM25만 준비하려면 `--sparse-only`를 사용한다.
+완료됐다. `scripts/03_build_vectors.py`는 같은 원본을 스트리밍해 선택한 dense 공급자와 Qdrant
+BM25를 배치 적재하고, 재시도·재개·전체 ID 대조 결과를 JSON으로 출력한다. 기본 공급자는 로컬
+KURE-v1이라 기사 내용을 외부로 전송하지 않는다. `EMBEDDING_PROVIDER=gemini`를 명시한 경우에만
+Google API 전송 권한과 한도를 확인한다. dense 없이 BM25만 준비하려면 `--sparse-only`를 쓴다.
 
 전체 데이터 경로와 현재 경계는 다음과 같다.
 
@@ -133,10 +133,10 @@ data/raw/*.jsonl
   → scripts/03_build_vectors.py → Qdrant
 ```
 
-현재 로컬 `articles` 컬렉션에는 실제 원본과 ID가 일치하는 BM25 포인트 178,887건과 dense
-포인트 900건이 있다. 전체 dense 적재와 semantic·hybrid 실데이터 비교가 끝나야 S3가 완료된다.
-현재 API 키의 무료 한도는 분당 100건·일일 1,000건이며, 전체 적재를 계속하려면 사용 등급 변경이
-필요하다.
+기존 `articles` 컬렉션에는 실제 원본과 ID가 일치하는 BM25 포인트 178,887건과 Gemini dense
+포인트 900건이 보존돼 있다. 로컬 KURE-v1은 별도 `articles_kure_v1` 컬렉션에서 1,024차원 dense와
+BM25를 함께 완성한 뒤 설정만 전환한다. 선택 근거와 복구 방법은
+[`ADR-0008`](docs/decisions/0008-local-kure-embedding.md)을 따른다.
 
 현 상태와 입력·제외·정합성 계약은
 [`docs/data/source-and-ingestion.md`](docs/data/source-and-ingestion.md) 및

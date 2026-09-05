@@ -17,6 +17,7 @@
 | `make doc-ack REASON='근거'` | 계약 문서를 검토했으나 계약 변경이 없다는 파일 해시·근거 기록 | 계약 코드만 변경된 경우 |
 | `make check` | lint + arch + unit + docs | 모든 커밋 전 |
 | `make agent-budget` | AGENTS.md의 현재 줄·바이트·추정 토큰 | 상위 지침 변경 후; 현재 실패 기준 없음 |
+| `make benchmark-embeddings MODEL='모델 ID'` | 실제 뉴스 고정 표본의 CPU 처리량·메모리·검색 결과 | 로컬 임베딩 모델·전처리 변경 전 |
 | `make compose-check` | 전체 프로필 Compose 해석·필수 변수·서비스 의존 문법 | 컨테이너 구성 변경 후 |
 | `make images` | `api`·`mcp`·`web` 이미지 실제 빌드 | Dockerfile·Compose 변경 후 |
 | `make up` | 기본 개발 인프라(Qdrant) | 로컬 개발 |
