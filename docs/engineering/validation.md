@@ -38,7 +38,10 @@ Qdrant 1.19 서비스 컨테이너를 기동하고 마이그레이션 뒤 `make 
 
 `make up`은 `docker-compose.yml`에 고정된 Qdrant `v1.19.0`을 기동한다. S3-P3 단위 테스트는
 주입한 모의 SDK client로 컬렉션·적재·검색 요청 계약을 검사하고, 실제 컨테이너와 임베딩 API는
-S2 시드가 준비된 S3-A2·A3에서 `make test-all`과 실제 요청으로 검증한다.
+S3-A2·A3에서 `make test-all`과 실제 요청으로 검증한다. 현재 `articles_kure_v1`은 실제 원본
+178,887건과 ID가 일치하며 누락·초과·sparse-only가 0건이다. 멱등 재실행은 dense 178,887건을
+모두 건너뛰고 임베딩·upsert 0건으로 끝났다. 실제 MCP의 세 검색 방식은 서로 다른 상위 목록을
+반환했고, 2024년 기간으로 제한한 질의는 세 방식 모두 0건을 반환했다.
 
 `make test-integration`의 Qdrant 검사는 실행마다 임시 컬렉션을 만들어 dense Cosine, BM25 IDF,
 payload 4종, OR·AND 결합, 기간 선필터를 실제 서버에서 확인하고 종료 시 컬렉션을 삭제한다.

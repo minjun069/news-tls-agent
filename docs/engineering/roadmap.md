@@ -105,14 +105,14 @@ S2의 운영 경로는 토픽별 후보를 만들지 않는다. `01_validate_raw
 
 ## S3 · 벡터 계층
 
-| 관련 | NFR-04, NFR-05, ADR-0003, ADR-0005 |
+| 관련 | NFR-04, NFR-05, ADR-0003, ADR-0005, ADR-0008 |
 |---|---|
 
 세부 작업 순서, S2와의 병렬 경계, 작업 단위별 모델·검증 게이트는
 [`S3 벡터 계층 실행계획`](s3-vector-layer-plan.md)을 따른다.
 
 - [x] `core/models.py`·`core/ports.py` — 검색 계약과 BM25 구현 위치 결정 (S3-P1)
-- [ ] Qdrant `articles` 컬렉션 생성 (`dense` Cosine + `bm25` sparse, payload 4종)
+- [x] Qdrant `articles_kure_v1` 컬렉션 생성 (`dense` Cosine + `bm25` sparse, payload 4종)
 - [x] `scripts/03_build_vectors.py` — 원본 직접 임베딩 적재, 배치·재시도·재개·ID 대조
 - [x] `infra/qdrant.py`·`infra/embedding.py` — Gemini·로컬 KURE 공급자와 모의 SDK 단위 검증 (S3-P3)
 - [x] `core/ranking.py` — RRF 결합 (순수 계산, S3-P2)
@@ -121,13 +121,14 @@ S2의 운영 경로는 토픽별 후보를 만들지 않는다. `01_validate_raw
 - [x] `tests/unit/test_ranking.py` — RRF 단위 테스트 (컨테이너 불필요, S3-P2)
 
 **완료 기준**
-- [ ] 실제 원본에서 세 방식이 각각 호출 가능하고 결과가 다름
-- [x] 기간 필터가 검색 단계에서 적용됨 — 실제 BM25·임시 dense 통합 검사
+- [x] 실제 원본에서 세 방식이 각각 호출 가능하고 결과가 다름
+- [x] 기간 필터가 검색 단계에서 적용됨 — 실제 전체 dense·BM25 MCP 검사
 
 > 기존 `articles`에는 실제 원본 178,887건의 BM25와 Gemini dense 900건을 보존한다. 무료 한도를
-> 피하기 위해 CPU 표본 실측으로 로컬 KURE-v1을 선택했고, 별도 임시 컬렉션 32건에서 dense·BM25
-> 적재와 MCP 세 방식 검색을 확인했다. S3 종료에는 `articles_kure_v1` 전체 dense 적재와 원본 ID
-> 대조, semantic·hybrid 실데이터 비교가 남아 있다 ([ADR-0008](../decisions/0008-local-kure-embedding.md)).
+> 피하기 위해 CPU 표본 실측으로 로컬 KURE-v1을 선택했다. `articles_kure_v1`에는 원본과 ID가
+> 일치하는 dense·BM25 178,887건을 적재했고, 재실행에서 dense 178,887건을 모두 건너뛰며 누락·
+> 초과·sparse-only가 0건임을 확인했다. 실제 MCP로 세 검색 방식의 서로 다른 결과, 기간 선필터,
+> MS-SQL 기사 복원도 검증했다 ([ADR-0008](../decisions/0008-local-kure-embedding.md)).
 
 ---
 

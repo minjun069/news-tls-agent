@@ -328,6 +328,11 @@ ID만 다시 임베딩한다. 로컬 공급자도 같은 재개 계약을 사용
 | `LOCAL_EMBEDDING_THREADS` | `10` | PyTorch CPU 스레드 |
 | `LOCAL_EMBEDDING_QUERY_PROMPT` | 빈 문자열 | KURE-v1 질의 접두어 없음 |
 
+현재 `articles_kure_v1`에는 이 설정으로 생성한 dense·BM25 포인트 178,887건이 있고 원본 대비
+누락·초과·sparse-only가 없다. 기본 재실행에서 178,887건의 dense 존재 여부를 확인해 모두
+건너뛰었으며 새 임베딩과 upsert는 발생하지 않았다. 실제 MCP 비교에서는 정확 용어 질의의
+keyword, 서술형 질의의 semantic, 두 순위를 합친 hybrid가 서로 다른 상위 목록을 반환했다.
+
 payload에 `service_date`를 두는 이유는 **기간 필터를 검색 단계에서 적용**하기 위함이다
 (NFR-05). 키워드와 의미 검색 모두 Qdrant query filter로 기간을 먼저 제한한 뒤 `top_k`를
 적용한다.

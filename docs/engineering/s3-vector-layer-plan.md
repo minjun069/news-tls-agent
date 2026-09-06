@@ -24,8 +24,9 @@ S3의 목표는 BM25 키워드 검색, Qdrant 의미 검색, RRF(Reciprocal Rank
 - 로컬 Qdrant에는 178,887건의 BM25 포인트가 적재됐고 원본과 누락·초과 ID가 없음을 확인했다.
 - 기존 `articles`에 Gemini dense 900건을 보존한다. 무료 한도로 전체 적재가 불가능해 KURE-v1과
   Qwen3-Embedding-0.6B를 CPU 표본 측정했고, KURE-v1 1,024차원·256토큰·정규화를 선택했다.
-- 별도 `articles_kure_smoke` 32건에서 로컬 dense·BM25 적재와 MCP 세 방식 검색을 확인했다.
-  전체 `articles_kure_v1` 적재와 실데이터 비교는 아직 남아 있다.
+- `articles_kure_v1`에 로컬 dense·BM25 178,887건을 적재했다. 원본 대비 누락·초과·sparse-only는
+  모두 0건이고, 같은 명령 재실행은 dense 178,887건을 모두 건너뛰어 upsert 0건으로 끝났다.
+- 실제 MCP에서 keyword·semantic·hybrid 결과 차이, 기간 선필터, MS-SQL 기사 복원을 확인했다.
 
 ## 2. 전체 의존 순서
 
@@ -174,8 +175,8 @@ tokenizer, OR·AND 조합, 기간 선필터가 계약대로 동작하는지 검�
 
 | 항목 | 내용 |
 |---|---|
-| 산출물 | `backend/scripts/03_build_vectors.py`, 실제 Qdrant `articles` 컬렉션 |
-| 상태 | 구현 완료·로컬 표본 검증 완료 — 별도 컬렉션 전체 KURE dense 적재 진행 전 |
+| 산출물 | `backend/scripts/03_build_vectors.py`, 실제 Qdrant `articles_kure_v1` 컬렉션 |
+| 상태 | 완료 — 전체 KURE dense·BM25 적재, 원본 ID 대조와 멱등 재실행 확인 |
 | 권장 모델 | `gpt-5.6-terra` |
 | 추론 수준 | `high` |
 
@@ -200,7 +201,7 @@ RRF를 사용한다. 검색기가 반환한 ID는 Repository에서 원문 메타
 
 | 항목 | 내용 |
 |---|---|
-| 상태 | 대기 — keyword 실데이터 검증 완료, semantic·hybrid는 전체 dense 적재 후 수행 |
+| 상태 | 완료 — 전체 원본의 세 방식 비교, 기간 선필터와 MS-SQL 복원 확인 |
 | 권장 모델 | `gpt-5.6-sol` |
 | 추론 수준 | 기본 `high`, 품질 원인 분석이 필요할 때만 `xhigh` |
 
@@ -216,16 +217,28 @@ RRF를 사용한다. 검색기가 반환한 ID는 Repository에서 원문 메타
 `make check`와 Qdrant·MS-SQL이 필요한 관련 통합 검사를 실행한다. 비교 결과가 기대와 다를
 때만 `xhigh`로 토큰화·질의·필터·RRF 입력을 추적하며, 높은 추론 수준을 기본값으로 쓰지 않는다.
 
+실제 MCP 비교에서 `계엄`, `통신사 고객 유심 정보가 유출된 사고`, `의대 정원 확대를 둘러싼
+정부와 의료계 갈등`을 같은 기간·`top_k=5`로 세 방식에 전달했다. 세 질의 모두 각 방식이 5건을
+반환했고 상위 ID·순서가 서로 달랐다. 정확 용어 질의는 BM25가 일치 기사를 찾았고, 서술형
+질의는 semantic이 SKT 고객정보 유출 및 의정 갈등 기사를 직접 보완했으며, hybrid는 두 목록을
+RRF로 결합했다. 반환된 45개 결과는 모두 MS-SQL 요약을 포함했다. 데이터 범위 밖인 2024년으로
+제한한 `계엄` 질의는 세 방식 모두 0건을 반환해 검색 전 기간 필터를 확인했다.
+
 ### S3-A6 · 종료 정리
 
 | 항목 | 내용 |
 |---|---|
-| 상태 | 대기 — A3 전체 dense 적재와 A5 비교 완료 후 문서·종료 검증 반영 |
+| 상태 | 완료 — 실제 적재·검색 근거 반영과 전체 종료 검증 통과 |
 | 권장 모델 | `gpt-5.6-luna` |
 | 추론 수준 | `medium` |
 
 변경 파일을 직접 다시 읽고 로드맵의 S3 체크리스트와 완료 기준을 검증 결과에 맞게 갱신한다.
 종료 보고에는 문제, 미검증, 사용자 작업, 검증 결과를 각각 적고 없으면 `없음`이라고 쓴다.
+
+종료 검증은 `make check` 125건, `make test-integration` 19건, `make test-all` 138건 통과와
+`make compose-check`, `make images` 성공으로 확인했다. 전체 적재 결과는 `collection_point_count=178887`,
+`missing_point_count=0`, `unexpected_point_count=0`, `sparse_only_count=0`이고, 멱등 재실행은
+`skipped_dense_count=178887`, `embedded_article_count=0`, `upserted_point_count=0`이다.
 
 ## 5. 모델 배정 원칙
 

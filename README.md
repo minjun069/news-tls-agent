@@ -134,8 +134,9 @@ data/raw/*.jsonl
 ```
 
 기존 `articles` 컬렉션에는 실제 원본과 ID가 일치하는 BM25 포인트 178,887건과 Gemini dense
-포인트 900건이 보존돼 있다. 로컬 KURE-v1은 별도 `articles_kure_v1` 컬렉션에서 1,024차원 dense와
-BM25를 함께 완성한 뒤 설정만 전환한다. 선택 근거와 복구 방법은
+포인트 900건이 보존돼 있다. 로컬 KURE-v1용 `articles_kure_v1`에는 원본과 ID가 일치하는
+1,024차원 dense·BM25 포인트 178,887건이 적재됐으며 `.env`는 이 컬렉션과 로컬 공급자를
+가리킨다. 같은 적재 명령을 다시 실행하면 dense 178,887건을 모두 건너뛴다. 선택 근거와 복구 방법은
 [`ADR-0008`](docs/decisions/0008-local-kure-embedding.md)을 따른다.
 
 현 상태와 입력·제외·정합성 계약은
