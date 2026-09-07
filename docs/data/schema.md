@@ -201,11 +201,23 @@ ORDER BY i.generated_at DESC;
 ### 4.3 지식 그래프 — 미추출 기사 확인
 
 ```sql
+WITH ranked AS (
+  SELECT ea.article_id, e.event_id,
+         ROW_NUMBER() OVER (
+           PARTITION BY e.event_id
+           ORDER BY ea.relevance_score DESC,
+                    ABS(DATEDIFF(day, a.service_date, e.event_date)),
+                    ea.article_id
+         ) AS rn
+  FROM issue_events e
+  JOIN issue_event_articles ea ON ea.event_id = e.event_id
+  JOIN articles a ON a.article_id = ea.article_id
+  WHERE e.issue_id = @issue_id
+)
 SELECT DISTINCT a.article_id
-FROM issue_event_articles ea
-JOIN articles a ON a.article_id = ea.article_id
-JOIN issue_events e ON e.event_id = ea.event_id
-WHERE e.issue_id = @issue_id
+FROM ranked r
+JOIN articles a ON a.article_id = r.article_id
+WHERE r.rn = 1
   AND a.entities_extracted_at IS NULL;
 ```
 

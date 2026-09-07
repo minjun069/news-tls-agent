@@ -1,84 +1,163 @@
 # news-tls-agent
 
-뉴스 아카이브를 근거로 사건 타임라인을 만들고, 각 분기점에 근거 기사를 귀속시켜 신뢰 가능한 형태로 제공한다.
+[![backend](https://github.com/minjun069/news-tls-agent/actions/workflows/backend.yml/badge.svg)](https://github.com/minjun069/news-tls-agent/actions/workflows/backend.yml)
+[![web](https://github.com/minjun069/news-tls-agent/actions/workflows/web.yml/badge.svg)](https://github.com/minjun069/news-tls-agent/actions/workflows/web.yml)
+[![release-images](https://github.com/minjun069/news-tls-agent/actions/workflows/release.yml/badge.svg)](https://github.com/minjun069/news-tls-agent/actions/workflows/release.yml)
 
-- 무엇을 만드는가 → [`docs/REQUIREMENTS.md`](docs/REQUIREMENTS.md)
-- 어떻게 만드는가 → [`docs/architecture/overview.md`](docs/architecture/overview.md)
-- 작업 규칙 → [`AGENTS.md`](AGENTS.md)
+뉴스 아카이브를 사건 단위 타임라인으로 조직하고, 각 분기점에 근거 기사를 귀속해 조회·대화·
+지식 그래프·PDF/Notion 내보내기로 이어 주는 프로젝트다. 학습 목표인 MCP, MS-SQL, Qdrant,
+AI 에이전트를 실제 서비스 경계로 사용한다.
 
----
+- 제품 범위: [`docs/REQUIREMENTS.md`](docs/REQUIREMENTS.md)
+- 아키텍처와 실행 모드: [`docs/architecture/overview.md`](docs/architecture/overview.md)
+- 스프린트 상태: [`docs/engineering/roadmap.md`](docs/engineering/roadmap.md)
+- 작업 규칙: [`AGENTS.md`](AGENTS.md)
 
-## 구조
+## 아키텍처
 
+```text
+Vue 3 web
+    │ REST + SSE
+    ▼
+FastAPI api ── stdio MCP client
+                    │ 요청별 MCP 자식 프로세스
+                    ▼
+              MCPServer v2
+                 │       │
+                 ▼       ▼
+              MS-SQL   Qdrant
 ```
-web/       Vue 3 + Vite
-  ↓ REST + SSE
-backend/api/         에이전트 오케스트레이션 · MCP 클라이언트
-  ↓ MCP (stdio)
-backend/mcp_server/  데이터 접근 계약 · 감사 지점 (LLM 호출 없음)
-  ↓
-MS-SQL (기사·이슈)   Qdrant (임베딩)
-```
 
-**에이전트는 저장소에 직접 접근하지 않는다.** 모든 데이터 접근은 MCP 서버를 경유한다 ([ADR-0001](docs/decisions/0001-mcp-data-access.md)).
+프론트엔드는 API만 호출하고, 에이전트의 조회·검색·내보내기는 MCP 서버를 통과한다. API가 MCP에
+연결할 수 없을 때 저장소를 직접 조회하는 우회 경로는 없다. 전체 계층 규칙은 import-linter가
+검사한다.
 
-## 실행 모드
+## 요구 환경
 
-| 모드 | 앱 | 저장소 | 용도 |
-|---|---|---|---|
-| A. 개발 | 로컬 프로세스 | MS-SQL 네이티브 + Qdrant 컨테이너 | 핫리로드 |
-| B. 전체 컨테이너 | 컨테이너 | 전부 컨테이너 | 클린 클론 검증 · 데모 |
-| C. CI | 러너 | 서비스 컨테이너 | 통합 테스트 |
+전체 컨테이너 모드에는 Docker Engine과 Docker Compose v2가 필요하다. 개발 모드는 추가로
+Python 3.12, [uv](https://docs.astral.sh/uv/), Node.js 22.19 이상, Microsoft ODBC Driver 18,
+네이티브 SQL Server Developer Edition을 사용한다.
 
-상세는 [`docs/architecture/overview.md`](docs/architecture/overview.md) §4.
-
-## 시작하기
-
-### 모드 B — 클린 클론 (NFR-13)
+비밀값은 저장소에 넣지 않고 루트 `.env`에만 둔다. 시작 전에 예시 파일을 복사하고 최소한
+`GOOGLE_API_KEY`, `MSSQL_PASSWORD`를 채운다. SQL Server의 `sa` 정책을 통과하는 강한 암호를
+사용해야 한다.
 
 ```bash
-cp .env.example .env      # 값을 채운다
+cp .env.example .env
+```
+
+## 클린 클론 기동 — 모드 B
+
+`.env` 설정 뒤 다음 한 줄이 MS-SQL, Qdrant, 마이그레이션, API, 독립 MCP 진입점, 웹을 모두
+준비한다. 마이그레이션 컨테이너가 성공 종료한 뒤 API/MCP가 시작되고, 웹은 API 헬스 통과 뒤
+시작한다.
+
+```bash
 docker compose --profile full up -d
 ```
 
-### 모드 A — 개발
+상태와 로그를 확인한다.
 
 ```bash
-make install              # .venv 생성 (uv)
-cp .env.example .env
-docker compose up -d      # qdrant만
-make migrate              # 미적용 마이그레이션 실행
-make check                # 린트 · 계층 규칙 · 단위 테스트
+docker compose --profile full ps
+docker compose --profile full logs migrate api mcp web
+curl http://localhost:8000/health
 ```
 
-MS-SQL은 네이티브로 설치한다 ([ADR-0002](docs/decisions/0002-mssql-native-qdrant-container.md)).
-WSL 개발에서는 `MSSQL_HOST`를 비워두면 실행 시 Windows 호스트 주소를 자동 해석한다.
-고정 주소가 필요한 경우에만 값을 지정한다. 상세는 `.env.example` 주석을 따른다.
+- 웹: `http://localhost:5173`
+- Swagger UI: `http://localhost:8000/docs`
+- Qdrant 대시보드: `http://localhost:6333/dashboard`
 
-## 데이터
+중지는 `docker compose --profile full down`이다. 데이터 볼륨까지 지우는 `down -v`는 MS-SQL과
+Qdrant 데이터를 삭제하므로 이 README의 일반 종료 명령에 포함하지 않는다.
 
-원본 뉴스 데이터는 저장소에 포함되지 않는다. `data/raw/`에 직접 투입한다.
+## 개발 실행 — 모드 A
+
+모드 A에서는 앱을 WSL 로컬 프로세스로 실행하고 Qdrant만 컨테이너로 띄운다. MS-SQL은
+[ADR-0002](docs/decisions/0002-mssql-native-qdrant-container.md)에 따라 Windows 네이티브
+설치를 사용한다.
+
+```bash
+make install
+make web-install
+docker compose up -d
+make migrate
+```
+
+최초 적재 또는 원본 갱신 시 전체 원본을 검증한 뒤 MS-SQL에 직접 적재한다.
 
 ```bash
 cd backend
 uv run python -m scripts.01_validate_raw ../data/raw/news.jsonl
 uv run python -m scripts.02_load_mssql ../data/raw/news.jsonl --batch-size 200
-uv run python scripts/03_build_vectors.py
 ```
 
-적재 순서와 제외 기준은 [`docs/data/source-and-ingestion.md`](docs/data/source-and-ingestion.md).
+루트에서 API를 실행한다.
+
+```bash
+make api
+```
+
+다른 터미널에서 웹을 실행한다.
+
+```bash
+make web
+```
+
+WSL에서 `MSSQL_HOST`가 비어 있으면 기본 게이트웨이를 Windows 호스트 주소로 해석한다. 고정
+주소가 필요할 때만 `.env`에 직접 지정한다.
+
+MCP 서버는 `.mcp.json`에 등록되어 있다. 다음 명령은 stdio 서버의 다섯 도구와 입력 스키마를
+검사한다.
+
+```bash
+make mcp-inspect
+```
+
+## 데이터 적재 상태
+
+서비스 기동과 뉴스 적재는 별도다. 실제 원본 `news.jsonl` 필드(`article_title`,
+`article_service_daytime`, `text` 등)를 검증·정규화해 MS-SQL에 직접 배치 적재하는 S2 경로는
+완료됐다. `scripts/03_build_vectors.py`와 실제 Qdrant `articles` 컬렉션 적재는 아직 완료되지
+않았다. 따라서 S9 E2E는 고정 기사 픽스처로 제품 흐름을 검증하지만 실제 벡터 검색 준비 완료를
+의미하지 않는다.
+
+전체 데이터 경로와 현재 경계는 다음과 같다.
+
+```text
+data/raw/*.jsonl
+  → scripts/01_validate_raw.py
+  → scripts/02_load_mssql.py → MS-SQL
+  → scripts/03_build_vectors.py → Qdrant  (미구현)
+```
+
+현 상태와 입력·제외·정합성 계약은
+[`docs/data/source-and-ingestion.md`](docs/data/source-and-ingestion.md) 및
+[`docs/engineering/roadmap.md`](docs/engineering/roadmap.md)의 S2·S3 체크리스트를 기준으로 한다.
 
 ## 검증
 
 ```bash
-make check      # 커밋 전 게이트
-make arch       # 계층 규칙만
-make test-all   # 통합 포함
+make check             # ruff · import-linter · 단위/API 조립 · 문서 동기화
+make web-check         # Vue 타입 검사 · 프로덕션 빌드
+make test-integration  # 실제 MS-SQL · Qdrant
+make test-e2e          # 생성 → 조회 → 근거 → 대화 → 그래프 → PDF
+make compose-check     # 전체 Compose 해석
+make images            # api · mcp · web 이미지 빌드
 ```
 
-계층 규칙은 문서가 아니라 `pyproject.toml`의 import-linter 계약으로 강제된다.
-각 검사가 무엇을 잡는지는 [`docs/engineering/agent-workflow.md`](docs/engineering/agent-workflow.md).
+`make test-integration`은 실행 가능한 MS-SQL과 Qdrant가 필요하다. E2E는 외부 Gemini·Notion
+계정 없이 재현되도록 외부 응답만 고정하고 실제 파이프라인, MCP payload, 그래프, 공용 내보내기
+유스케이스를 연결한다. CI에서는 이 둘을 별도 잡으로 모두 실행한다.
 
-## 진행 상황
+## 이미지 게시
 
-[`docs/engineering/roadmap.md`](docs/engineering/roadmap.md) — 현재 **S2 데이터 계층**.
+`v*` 태그를 push하면 `release-images` 워크플로가 다음 이미지를 GHCR에 게시한다.
+
+```text
+ghcr.io/minjun069/news-tls-agent-api:<tag>
+ghcr.io/minjun069/news-tls-agent-mcp-server:<tag>
+```
+
+실제 서버 배포는 프로젝트 범위 밖이다. API/MCP 이미지 경계와 stdio 배치는
+[ADR-0007](docs/decisions/0007-stdio-mcp-container-packaging.md)을 따른다.

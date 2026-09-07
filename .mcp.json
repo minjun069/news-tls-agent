@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "news-tls-agent": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "backend",
+        "run",
+        "python",
+        "-m",
+        "mcp_server.server"
+      ]
+    }
+  }
+}

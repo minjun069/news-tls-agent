@@ -27,9 +27,9 @@
                 │ MCP (stdio)
                 ▼
 ┌──────────────────────────────────────────────┐
-│  mcp_server/   FastMCP                        │
+│  mcp_server/   MCPServer (Python SDK v2)      │
 │    search_articles · read_article             │
-│    list_issues · get_issue                    │
+│    list_issues · get_issue · export_briefing  │
 │    ※ LLM 호출 없음. 데이터 접근 계약 + 감사점  │
 └──────┬─────────────────────────┬─────────────┘
        ▼                         ▼
@@ -78,13 +78,13 @@
 | DB 드라이버 | SQLAlchemy + pyodbc (ODBC Driver 18) | |
 | Vector DB | Qdrant | Docker 컨테이너 |
 | Search Engine | Qdrant BM25 · dense 벡터 · core RRF **3종 모두 구현** | 에이전트가 선택하거나 전부 수행 (NFR-04) |
-| AI | Google Gemini (`gemini-2.5-flash`) | 보유 키 기준 |
-| Embedding | Google `text-embedding-004` | 차원수는 착수 시 확인 |
-| Agent | LangGraph `create_react_agent` | |
-| MCP | `mcp` (FastMCP) + `langchain-mcp-adapters` | stdio 전송 |
-| PDF 생성 | 미정 | EXP-001 |
-| Notion 연동 | `notion-client` | EXP-002 |
-| 그래프 시각화 | 미정 (프론트 라이브러리) | GRPH-001 |
+| AI | Google Gemini (`gemini-3.6-flash`) | 보유 키와 실제 API 가용성 기준 |
+| Embedding | Google `gemini-embedding-2` | 실제 API 기본 출력 3,072차원 확인 |
+| Agent | LangGraph 기반 LangChain `create_agent` | MCP 도구 호출·토큰 스트리밍 |
+| MCP | `mcp` v2 (`MCPServer`, `ClientSession`) + LangChain 도구 브리지 | stdio 전송, [ADR-0006](../decisions/0006-mcp-v2-langchain-tool-bridge.md) |
+| PDF 생성 | `fpdf2` + 환경별 한글 TTF 포함 | EXP-001 |
+| Notion 연동 | 공식 `notion-client` | EXP-002 |
+| 그래프 시각화 | Vue 네이티브 SVG 원형 배치 | GRPH-001 |
 | Authentication | 없음 | 단일 사용자 전제 |
 | Cache | 없음 | 이슈 재사용은 DB 조회로 처리 |
 | Queue | 없음 | 생성이 짧아 작업 큐 불필요 |
@@ -103,6 +103,12 @@
 - 우선순위: Should
 - 기준 조건: 시드 데이터 규모([PRD MVP 범위](../REQUIREMENTS.md#34-mvp-범위)), 외부 API 정상 응답
 - 관련: ISS-001
+
+수집 루프 기본 상한은 4라운드, 선후 이벤트 연쇄 깊이 2, 라운드당 검색 결과 20건이다. P1
+되묻기는 2회까지 허용한다. `TIMELINE_MAX_ROUNDS`, `TIMELINE_MAX_CHAIN_DEPTH`,
+`TIMELINE_SEARCH_TOP_K`, `TIMELINE_MAX_CLARIFICATIONS` 환경변수가 이 값을 덮어쓰며 모두 1
+이상이어야 한다. 기본값은 종료 조건 네 가지를 모의 LLM으로 각각 실행하는 단위 테스트의
+기준이기도 하다.
 
 #### NFR-02 · 조회 응답 시간
 이슈 목록 및 상세 조회는 1초 이내에 응답한다.
@@ -246,6 +252,12 @@ docker compose --profile full up -d
 `docker-compose.yml`에서 `qdrant`만 프로필이 없고, `mssql`·`api`·`mcp`·`web`은 `full` 프로필에 속한다.
 따라서 모드 A에서는 Qdrant만 뜬다 — ADR-0002의 "MS-SQL은 네이티브"가 유지된다.
 
+모드 B에서는 `migrate`가 MS-SQL 헬스 통과 뒤 스키마를 적용하고 성공 종료한 다음 `api`와
+`mcp`가 시작한다. `web`은 API 헬스 통과 뒤 시작한다. API 컨테이너는 stdio MCP 모듈을 자식
+프로세스로 실행하고, 독립 `mcp` 컨테이너는 Inspector 같은 별도 stdio 클라이언트가 같은
+이미지를 사용할 수 있음을 보장한다. 두 실행 역할의 경계는
+[ADR-0007](../decisions/0007-stdio-mcp-container-packaging.md)을 따른다.
+
 ### 4.1 접속 정보
 
 WSL에서 개발하므로 모드에 따라 호스트가 달라진다. `.env.example`에 두 벌을 모두 적는다.
@@ -266,13 +278,29 @@ WSL2는 별도 네트워크라 Windows 호스트의 SQL Server에 `localhost`로
 - 컨테이너: `MSSQL_COLLATION` 환경변수
 - `000_bootstrap.sql`: `CREATE DATABASE ... COLLATE`
 
+### 4.3 API 프로세스 조립
+
+`api/routes/`는 `api/providers.py`의 포트만 의존한다. `api/main.py`가 FastAPI dependency
+override로 `api/deps.py` 구현을 연결하고, `api/deps.py`만 `infra`를 import한다. 따라서 라우터가
+조립점을 경유해 저장소 구현에 간접 의존하는 경로도 import-linter가 차단한다.
+
+조회·대화 요청은 `infra/mcp_client.py`가 stdio MCP 서버를 호출한다. 타임라인 생성은 S5의
+`TimelinePipeline`을 요청별 진행 sink와 함께 조립하며, 동기 파이프라인은 작업 스레드에서
+실행해 이벤트 루프가 SSE 진행 프레임을 계속 보낼 수 있게 한다.
+
+S8의 그래프 조회는 타임라인 생성과 같은 애플리케이션 파이프라인이다. `app/graph.py`가 대표
+기사의 본문을 P9에 전달하고 `core.ports.Repository`로 기사 단위 트랜잭션 저장을 요청한다.
+라우터는 저장소 구현을 import하지 않으며 `api/deps.py`만 구현을 주입한다. 반면 내보내기 메뉴는
+`export_briefing` MCP 툴을 호출한다. 따라서 대화 에이전트와 화면 메뉴가 모두 MCP 서버에서
+조립한 `app/exporting.py`의 같은 브리핑 구성·변환 유스케이스를 실행한다.
+
 ---
 
 ## 5. 구현 지침
 
 PRD에서 다루지 않는 구현 수준의 규칙이다. 사용자가 겪는 것은 달라지지 않지만, 구현 시 지켜야 한다.
 
-### 4.1 타임라인 생성 파이프라인
+### 5.1 타임라인 생성 파이프라인
 
 | 항목 | 방침 |
 |---|---|
@@ -282,7 +310,7 @@ PRD에서 다루지 않는 구현 수준의 규칙이다. 사용자가 겪는 �
 | 이벤트 중복 병합 | 날짜와 근거 기사 집합이 같으면 하나로 병합한다 |
 | 검색 방식 선택 | 에이전트가 판단한다. 판단 결과를 로그에 남긴다 (NFR-14) |
 
-### 4.2 에이전트
+### 5.2 에이전트
 
 | 항목 | 방침 |
 |---|---|
@@ -294,14 +322,17 @@ PRD에서 다루지 않는 구현 수준의 규칙이다. 사용자가 겪는 �
 >
 > 관련 결정: [ADR-0004](../decisions/0004-export-intent-via-tool.md)
 
-### 4.3 내보내기
+### 5.3 내보내기
 
 | 항목 | 방침 |
 |---|---|
 | 진입점 | 화면 메뉴와 대화 두 가지. **두 경로가 같은 구현을 호출한다** |
 | 브리핑 구성 | 마크다운으로 먼저 만들고 형식별로 변환한다 |
+| PDF | `EXPORT_DOWNLOAD_DIR`에 원자적으로 교체 저장하고 `/downloads/{file}`로 제공한다 |
+| PDF 한글 글꼴 | `PDF_FONT_PATH` 또는 알려진 NanumGothic·맑은 고딕 경로의 TTF를 PDF에 포함한다 |
+| Notion | 요청의 `parent_page_id`를 우선하고 없으면 `NOTION_PARENT_PAGE_ID`를 사용한다 |
 
-### 4.4 지식 그래프
+### 5.4 지식 그래프
 
 | 항목 | 방침 |
 |---|---|
@@ -309,6 +340,7 @@ PRD에서 다루지 않는 구현 수준의 규칙이다. 사용자가 겪는 �
 | 추출 대상 | 대표 기사 |
 | 추출 시점 | 그래프 조회 시. 미추출 기사가 있으면 그때 추출한다 |
 | 그래프 구성 | 기사별로 각각 구성한다 ([지식 그래프 요구사항](../requirements/knowledge-graph.md)) |
+| 화면 상한 | API는 전부 반환하고 화면은 기사당 노드 30개까지만 그리며 축소 사실을 표시한다 |
 
 ---
 
@@ -318,7 +350,13 @@ PRD에서 다루지 않는 구현 수준의 규칙이다. 사용자가 겪는 �
 
 | 단계 | 내용 |
 |---|---|
-| CI | ruff, pytest(단위), pytest(통합 — 서비스 컨테이너), vue-tsc, 프론트 빌드 |
-| CD | 태그 push 시 `api`·`mcp_server` 이미지 빌드 → GHCR 푸시 |
+| CI | ruff·계층·단위, MS-SQL/Qdrant 서비스 통합, 핵심 흐름 E2E, Vue 타입·빌드, 컨테이너 이미지 빌드 |
+| CD | `v*` 태그 push 시 `api`·`mcp_server` 이미지 빌드 → GHCR 푸시 |
 
 통합 테스트는 GitHub Actions 서비스 컨테이너로 MS-SQL과 Qdrant를 기동해 수행한다. 로컬은 네이티브, CI는 컨테이너인 이중 구성이다.
+
+`backend/Dockerfile`은 공통 런타임에서 `api`, `mcp`, `migrate` 대상을 만든다. CD 이미지 이름은
+`ghcr.io/<owner>/<repository>-api:<tag>`와
+`ghcr.io/<owner>/<repository>-mcp-server:<tag>`다. 웹 이미지는 모드 B 재현용으로 CI에서
+빌드하지만 게시 대상은 아니다. 이미지 경계와 stdio 프로세스 배치는
+[ADR-0007](../decisions/0007-stdio-mcp-container-packaging.md)의 결정이다.

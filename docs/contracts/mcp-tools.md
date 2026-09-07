@@ -6,9 +6,9 @@
 > 특히 각 툴의 `description`은 **곧 프롬프트**다. 에이전트가 그 문장을 읽고 호출 여부를 판단하므로 문구 자체가 설계 대상이다.
 
 전송: stdio
-구현: `backend/mcp_server/tools/`
+구현: Python MCP SDK v2 `MCPServer`, `backend/mcp_server/tools/`
 검증: `make mcp-inspect`
-실행: `cd backend && npx @modelcontextprotocol/inspector uv run python mcp_server/server.py`
+실행: `make mcp-inspect` (`uv run python -m mcp_server.server`를 stdio 서버로 실행)
 
 ---
 
@@ -40,11 +40,13 @@
 | `ISSUE_NOT_FOUND` | 이슈 없음 | 사용자에게 알림 |
 | `STORAGE_UNAVAILABLE` | 저장소 연결 실패 | 재시도하지 않고 사용자에게 알림 |
 | `INVALID_ARGUMENT` | 인자 형식 오류 | 인자를 고쳐 재호출 |
-| `EXPORT_NOT_CONFIGURED` | 내보내기 연결 설정 없음 | 사용자에게 설정 안내 |
+| `EXPORT_NOT_CONFIGURED` | 내보내기 구현 또는 외부 연결 설정 없음 | 사용자에게 설정 안내 |
 
 ### 1.3 감사 로그
 
-모든 호출은 시각·툴 이름·인자·결과 건수를 기록한다 (NFR-06).
+모든 호출은 시각·툴 이름·인자·결과 건수를 `MCP_AUDIT_LOG`에 기록한다 (NFR-06).
+환경변수가 비어 있으면 프로젝트의 `logs/mcp-audit.log`를 사용하며, stdio 프로토콜을
+손상시키지 않도록 콘솔 로그는 stdout이 아니라 stderr에 쓴다.
 
 ```
 2026-08-21T14:23:11 search_articles method=hybrid query="국회 표결" top_k=5 -> 5건
@@ -80,7 +82,7 @@ def search_articles(query: str, ...) -> dict:
 |---|---|---|---|
 | `query` | string | ✅ | 검색어 또는 검색용 문장 |
 | `method` | enum | | `keyword` \| `semantic` \| `hybrid` (기본 `hybrid`) |
-| `top_k` | int | | 반환 건수 (기본 5) |
+| `top_k` | int | | 반환 건수 (기본 5, 1~100) |
 | `date_from` | date | | 서비스 일자 하한 |
 | `date_to` | date | | 서비스 일자 상한 |
 
@@ -133,6 +135,7 @@ def search_articles(query: str, ...) -> dict:
     "title": "긴급 대국민 담화",
     "sub_title": "",
     "service_date": "2024-12-03",
+    "summary": "...",
     "content": "...",
     "url": "https://...",
     "truncated": true
@@ -141,7 +144,8 @@ def search_articles(query: str, ...) -> dict:
 }
 ```
 
-본문은 표시 상한까지만 반환하고 `truncated`로 알린다. 잘렸다는 사실을 `message`에도 담는 이유는 에이전트가 그 한계를 답변에 반영할 수 있어야 하기 때문이다.
+본문은 유니코드 문자 20,000자까지만 반환하고 `truncated`로 알린다. 잘렸다는 사실을
+`message`에도 담는 이유는 에이전트가 그 한계를 답변에 반영할 수 있어야 하기 때문이다.
 
 관련: ART-002, AC-009
 
@@ -196,16 +200,26 @@ def search_articles(query: str, ...) -> dict:
     "topic": "...",
     "title": "...",
     "summary": "...",
+    "generated_at": "2026-08-21T14:23:11",
     "events": [
       { "event_order": 1, "event_date": "2024-12-03", "title": "...", "summary": "...",
-        "article_ids": [1234567, 1234890] }
+        "primary_article": {
+          "article_id": 1234567, "title": "...", "service_date": "2024-12-03"
+        },
+        "articles": [
+          { "article_id": 1234567, "title": "...", "service_date": "2024-12-03",
+            "relevance_score": 0.91 }
+        ] }
     ]
   },
   "message": "이벤트 7건을 포함한 이슈입니다."
 }
 ```
 
-이벤트는 `event_order` 오름차순이다. 기사 본문은 포함하지 않는다.
+이슈에는 `generated_at`이 포함된다. 이벤트는 `event_order` 오름차순이고 `articles`는
+`relevance_score` 내림차순이다. `primary_article`은 대표 기사 선정 정책을 적용한 결과다.
+기사 본문은 포함하지 않는다. API 서버가 이 구조화 결과를 HTTP 이슈 상세 응답으로 변환하므로
+저장소를 직접 조회하지 않는다.
 
 관련: ISS-005
 
@@ -265,6 +279,10 @@ Notion
 이 툴이 **의도 분류를 대신한다.** 정규식이나 키워드 매칭으로 LLM 앞단에서 내보내기 의도를 판별하지 않는다. description의 "명시적으로 요청한 경우에만"과 "형식을 말하지 않았다면 묻기"가 판단 기준 전부다.
 
 화면 메뉴 경로(`POST /issues/{id}/export`)와 **같은 구현**을 호출한다.
+
+S8에서는 브리핑 마크다운 구성 뒤 PDF 또는 Notion 어댑터로 변환하는 공용 유스케이스가 주입된다.
+화면 메뉴도 이 MCP 툴을 호출한다. Notion 토큰·상위 페이지 또는 PDF 한글 글꼴이 없으면
+프로토콜 오류를 던지지 않고 `EXPORT_NOT_CONFIGURED`를 반환한다.
 
 관련: CHAT-006, AC-015, AC-016, EXP-001, EXP-002, [ADR-0004](../decisions/0004-export-intent-via-tool.md)
 

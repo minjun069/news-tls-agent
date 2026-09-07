@@ -15,7 +15,15 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
 from core.config import ConfigError, load_mssql_config
-from core.models import Article, EventArticleInput, IssueCreate, IssueEventInput
+from core.models import (
+    Article,
+    ArticleGraphExtraction,
+    EventArticleInput,
+    ExtractedEntity,
+    ExtractedRelation,
+    IssueCreate,
+    IssueEventInput,
+)
 from db.migrate import apply_migrations
 from infra.db import create_db_engine, create_session_factory
 from infra.entities import ArticleRow, IssueRow
@@ -167,6 +175,11 @@ def test_three_level_join_reverse_lookup_and_ranking(context: RepositoryContext)
     requested = repository.get_articles([ids[2], 0, ids[0], ids[2]])
     assert [saved.article_id for saved in requested] == [ids[2], ids[0]]
 
+    summaries = repository.list_issues()
+    summary = next(item for item in summaries if item.issue_id == issue_id)
+    assert summary.topic == issue.topic
+    assert summary.event_count == 1
+
 
 def test_failed_article_link_rolls_back_whole_issue(context: RepositoryContext) -> None:
     repository = context.repository
@@ -195,3 +208,34 @@ def test_failed_article_link_rolls_back_whole_issue(context: RepositoryContext) 
         repository.save_issue(issue)
 
     assert repository.find_issue_by_topic(issue.topic) is None
+
+
+def test_article_graph_is_replaced_atomically_and_traceable(context: RepositoryContext) -> None:
+    repository = context.repository
+    article_id = context.article_base + 20
+    repository.upsert_articles([article(article_id, "그래프 기사", date(2026, 3, 1))])
+    extraction = ArticleGraphExtraction(
+        entities=(
+            ExtractedEntity(name="기관 A", entity_type="기관"),
+            ExtractedEntity(name="사건 B", entity_type="사건"),
+        ),
+        relations=(ExtractedRelation(source="기관 A", target="사건 B", relation_type="발표"),),
+    )
+
+    repository.replace_article_graph(article_id, extraction)
+    graph = repository.get_article_graph(article_id)
+    saved_article = repository.get_article(article_id)
+
+    assert graph is not None
+    assert graph.article_id == article_id
+    assert {node.name for node in graph.nodes} == {"기관 A", "사건 B"}
+    assert graph.edges[0].source in {node.id for node in graph.nodes}
+    assert graph.edges[0].target in {node.id for node in graph.nodes}
+    assert saved_article is not None
+    assert saved_article.entities_extracted_at is not None
+
+    repository.replace_article_graph(article_id, ArticleGraphExtraction())
+    replaced = repository.get_article_graph(article_id)
+    assert replaced is not None
+    assert replaced.nodes == ()
+    assert replaced.edges == ()

@@ -40,10 +40,34 @@ class GeminiConfig:
 
 
 @dataclass(frozen=True)
+class TimelineConfig:
+    max_rounds: int
+    max_chain_depth: int
+    max_clarifications: int
+    search_top_k: int
+
+
+@dataclass(frozen=True)
+class ApiConfig:
+    cors_origins: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ExportConfig:
+    download_dir: str
+    pdf_font_path: str
+    notion_token: str
+    notion_parent_page_id: str
+
+
+@dataclass(frozen=True)
 class Settings:
     mssql: MssqlConfig
     qdrant: QdrantConfig
     gemini: GeminiConfig
+    timeline: TimelineConfig
+    api: ApiConfig
+    export: ExportConfig
 
 
 def _required(env: Mapping[str, str], key: str) -> str:
@@ -55,6 +79,17 @@ def _required(env: Mapping[str, str], key: str) -> str:
 
 def _optional(env: Mapping[str, str], key: str, default: str = "") -> str:
     return env.get(key, "").strip() or default
+
+
+def _positive_int(env: Mapping[str, str], key: str, default: int) -> int:
+    raw_value = _optional(env, key, str(default))
+    try:
+        value = int(raw_value)
+    except ValueError as exc:
+        raise ConfigError(f"{key}는 정수여야 합니다") from exc
+    if value < 1:
+        raise ConfigError(f"{key}는 1 이상이어야 합니다")
+    return value
 
 
 def load_mssql_config(env: Mapping[str, str]) -> MssqlConfig:
@@ -83,7 +118,34 @@ def load_settings(env: Mapping[str, str]) -> Settings:
         ),
         gemini=GeminiConfig(
             api_key=_required(env, "GOOGLE_API_KEY"),
-            model=_optional(env, "GEMINI_MODEL", "gemini-2.5-flash"),
-            embedding_model=_optional(env, "GEMINI_EMBEDDING_MODEL", "text-embedding-004"),
+            model=_optional(env, "GEMINI_MODEL", "gemini-3.6-flash"),
+            embedding_model=_optional(env, "GEMINI_EMBEDDING_MODEL", "gemini-embedding-2"),
         ),
+        timeline=TimelineConfig(
+            max_rounds=_positive_int(env, "TIMELINE_MAX_ROUNDS", 4),
+            max_chain_depth=_positive_int(env, "TIMELINE_MAX_CHAIN_DEPTH", 2),
+            max_clarifications=_positive_int(env, "TIMELINE_MAX_CLARIFICATIONS", 2),
+            search_top_k=_positive_int(env, "TIMELINE_SEARCH_TOP_K", 20),
+        ),
+        api=load_api_config(env),
+        export=load_export_config(env),
+    )
+
+
+def load_api_config(env: Mapping[str, str]) -> ApiConfig:
+    """브라우저가 접근할 출처 목록만 별도로 읽어 앱 import 시 비밀값을 요구하지 않는다."""
+    raw_origins = _optional(env, "CORS_ORIGINS", "http://localhost:5173")
+    origins = tuple(dict.fromkeys(item.strip() for item in raw_origins.split(",") if item.strip()))
+    if not origins:
+        raise ConfigError("CORS_ORIGINS에는 한 개 이상의 출처가 필요합니다")
+    return ApiConfig(cors_origins=origins)
+
+
+def load_export_config(env: Mapping[str, str]) -> ExportConfig:
+    """PDF 파일 위치와 선택적인 Notion 연결 설정을 읽는다."""
+    return ExportConfig(
+        download_dir=_optional(env, "EXPORT_DOWNLOAD_DIR", "downloads"),
+        pdf_font_path=_optional(env, "PDF_FONT_PATH"),
+        notion_token=_optional(env, "NOTION_TOKEN"),
+        notion_parent_page_id=_optional(env, "NOTION_PARENT_PAGE_ID"),
     )

@@ -38,6 +38,11 @@ Git은 파일의 추적 여부와 이력을 알려줄 뿐, 실제 파일·데이
 
 `backend/scripts/01_validate_raw.py`를 예로 들면, 라우터는 이 경로를 `source data and ingestion` 규칙과 매칭해 `docs/data/source-and-ingestion.md`를 출력한다. 검색 입력·결과 모델과 포트인 `backend/core/models.py`, `backend/core/ports.py`, 순위 결합 함수인 `backend/core/ranking.py`는 `AI pipeline and retrieval` 규칙에도 매칭되어 `docs/ai/specification.md`를 함께 출력한다. 에이전트는 편집 전에 출력된 문서에서 허용 원본 필드, 정규화 결과, 결측 행 처리, 중복 정책을 읽고 코드 변경이 이 계약을 바꾸는지 판정한다. 계약이 바뀌면 문서도 수정하고, 바뀌지 않으면 아래의 검토 확인을 남긴다.
 
+S5의 실행 설정·오류·Gemini 어댑터·CLI인 `backend/core/config.py`, `backend/core/errors.py`,
+`backend/infra/gemini.py`, `backend/scripts/04_generate_timeline.py`와 환경변수 예시도 같은 AI 명세로
+라우팅한다. 이 경로의 모델명, 종료 상한, 구조화 출력 또는 실행 입력이 바뀌면 에이전트가
+`docs/ai/specification.md`를 읽고 같은 변경에서 계약을 맞춘다.
+
 Codex의 PreToolUse 훅은 같은 라우팅을 패치 직전에 자동 실행해 문서 경로를 모델 문맥에 넣는다. 훅은 문서를 대신 읽거나 계약 준수를 판정하지 않는다. 최종 판정은 `make check`와 CI의 문서 동기화 검사가 담당한다.
 
 ## 3. 상황별 피드백 루프
@@ -46,7 +51,7 @@ Codex의 PreToolUse 훅은 같은 라우팅을 패치 직전에 자동 실행해
 |---|---|---|---|
 | L1 | Python 편집 직후 | Codex PostToolUse → ruff·import-linter | S1 |
 | L2 | 커밋 전 | `make check` → lint·arch·unit·docs | S1 |
-| L3 | PR | GitHub Actions | S1, 통합은 S9 확장 |
+| L3 | PR | GitHub Actions의 check·integration·e2e·images·web 잡 | S1, S9 확장 |
 | L4 | 상위 지침 변경 | `make agent-budget` 측정; 목표 기준은 사용자 결정 대기 | S1 |
 | L5 | 계약 코드 변경 | 계약 문서 동반 변경 또는 파일 해시 기반 변경 없음 확인 | S1 |
 | L6 | 검색 방식 변경 | 같은 입력 집합의 3종 결과 비교 | S3 |
@@ -107,6 +112,8 @@ LLM 문장 자체의 골든 파일 대조는 사용하지 않는다. 비결정�
 | 상위 지침 크기 측정 | `.harness/report_agent_budget.py` |
 | 편집 직후 검사 | `.harness/on-edit.sh` + `.codex/hooks.json` |
 | 커밋 전 통합 게이트 | `Makefile` |
-| PR 게이트 | `.github/workflows/backend.yml` |
+| PR 게이트 | `.github/workflows/backend.yml` · `.github/workflows/web.yml` |
+| 태그 이미지 게시 | `.github/workflows/release.yml` · `backend/Dockerfile` |
+| 전체 컨테이너 재현 | `docker-compose.yml` · `backend/Dockerfile` · `web/Dockerfile` |
 
 새 루프를 추가하면 이 표, 실제 구현, [`validation.md`](validation.md)를 같은 변경에서 갱신한다.

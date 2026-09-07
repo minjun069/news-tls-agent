@@ -15,7 +15,7 @@ S1 기반 ─┬─ S2 데이터 계층 ─┬─ S4 MCP 서버 ─ S5 생성 �
 
 ---
 
-## 현재 작업 인수인계 — S2 전체 원본 적재
+## S2 전체 원본 적재 결과
 
 `data/raw/news.jsonl`은 178,887행이며, 전수 파싱에서 JSON 오류·비객체·필수 필드 제외·유효
 `article_id` 중복은 모두 0건이었다. 기사 시각 범위는 `2025-01-01 00:12:54`부터
@@ -116,7 +116,7 @@ S2의 운영 경로는 토픽별 후보를 만들지 않는다. `01_validate_raw
 - [ ] `scripts/03_build_vectors.py` — 임베딩 적재, 배치·재시도
 - [x] `infra/qdrant.py`·`infra/embedding.py` — 모의 SDK 단위 검증 (S3-P3)
 - [x] `core/ranking.py` — RRF 결합 (순수 계산, S3-P2)
-- [ ] `app/search.py` — 3종 검색 유스케이스
+- [x] `app/search.py` — 3종 검색 유스케이스
 - [x] 기간 필터를 검색 단계에서 적용하는 요청 구현·모의 검증 (S3-P3)
 - [x] `tests/unit/test_ranking.py` — RRF 단위 테스트 (컨테이너 불필요, S3-P2)
 
@@ -131,13 +131,13 @@ S2의 운영 경로는 토픽별 후보를 만들지 않는다. `01_validate_raw
 | 관련 | CHAT-002, NFR-06, NFR-12, EX-06, ADR-0001 |
 |---|---|
 
-- [ ] `mcp_server/server.py`·`mcp_server/tools/` — FastMCP
-- [ ] 툴 5종 + **description 문구** ([`MCP_TOOLS.md`](../contracts/mcp-tools.md) §7 작성 규칙)
-- [ ] 응답 규약 `{ok, ...}` / `{ok:false, error:{code,message}}` ([`MCP_TOOLS.md`](../contracts/mcp-tools.md))
-- [ ] 감사 로그
-- [ ] payload 함수와 데코레이터 분리
-- [ ] `tests/unit/test_mcp_payloads.py` — payload 함수 (MCP 없이)
-- [ ] `.mcp.json` — 자기 MCP 서버를 개발 환경에 등록
+- [x] `mcp_server/server.py`·`mcp_server/tools/` — Python MCP SDK v2 `MCPServer`
+- [x] 툴 5종 + **description 문구** ([`MCP_TOOLS.md`](../contracts/mcp-tools.md) §7 작성 규칙)
+- [x] 응답 규약 `{ok, ...}` / `{ok:false, error:{code,message}}` ([`MCP_TOOLS.md`](../contracts/mcp-tools.md))
+- [x] 감사 로그
+- [x] payload 함수와 데코레이터 분리
+- [x] `tests/unit/test_mcp_payloads.py` — payload 함수 (MCP 없이)
+- [x] `.mcp.json` — 자기 MCP 서버를 개발 환경에 등록
 
 **완료 기준**
 - MCP Inspector에서 툴 5종 모두 정상 응답
@@ -148,6 +148,9 @@ S2의 운영 경로는 토픽별 후보를 만들지 않는다. `01_validate_raw
 make mcp-inspect
 ```
 
+`export_briefing`은 S4에서 툴 계약과 주입 포트까지만 제공한다. S8 구현이 주입되기 전에는
+`EXPORT_NOT_CONFIGURED` 구조화 오류를 반환하며 PDF·Notion 파일을 임시 생성하지 않는다.
+
 ---
 
 ## S5 · 타임라인 생성 파이프라인
@@ -155,23 +158,24 @@ make mcp-inspect
 | 관련 | ISS-001, ISS-006, EX-01~EX-05, AC-001~003, AC-008, AC-022, AC-023 |
 |---|---|
 
-가장 복잡한 스프린트다. LLM 호출이 8종 들어간다 ([`AI_SPEC.md`](../ai/specification.md) §2).
+가장 복잡한 스프린트다. S5에는 LLM 호출 P1~P8이 들어가고, P9 엔티티·관계 추출은 S8에서
+그래프 조회 시 실행한다 ([`AI_SPEC.md`](../ai/specification.md) §2).
 
-- [ ] `core/models.py`·`core/errors.py` — 도메인 스키마와 예외
-- [ ] P1 질의 의도 해석 + 되묻기
-- [ ] P2 가상 타임라인 생성
-- [ ] P3 검색 쿼리 생성 (방식 선택 포함)
-- [ ] P4 핵심 이벤트 선정 (배치 판정)
-- [ ] P5 선후 이벤트 추출
-- [ ] P6 충분성 검토
-- [ ] P7 가상 이벤트 생성
-- [ ] P8 타임라인 병합
-- [ ] 수집 루프 오케스트레이션 + **종료 조건 4가지** ([타임라인 종료 정책](../requirements/timeline.md#수집-루프-종료-정책))
-- [ ] 인용 검증 → 트랜잭션 저장
-- [ ] 파이프라인 실행 로그 (NFR-14)
-- [ ] CLI 진입점
-- [ ] `app/pipeline.py` — 수집 루프 오케스트레이션
-- [ ] `tests/unit/test_pipeline.py` — LLM 모킹. 허구 ID 주입, 무한 루프 방지
+- [x] `core/models.py`·`core/errors.py` — 도메인 스키마와 예외
+- [x] P1 질의 의도 해석 + 되묻기
+- [x] P2 가상 타임라인 생성
+- [x] P3 검색 쿼리 생성 (방식 선택 포함)
+- [x] P4 핵심 이벤트 선정 (배치 판정)
+- [x] P5 선후 이벤트 추출
+- [x] P6 충분성 검토
+- [x] P7 가상 이벤트 생성
+- [x] P8 타임라인 병합
+- [x] 수집 루프 오케스트레이션 + **종료 조건 4가지** ([타임라인 종료 정책](../requirements/timeline.md#수집-루프-종료-정책))
+- [x] 인용 검증 → 트랜잭션 저장
+- [x] 파이프라인 실행 로그 (NFR-14)
+- [x] CLI 진입점
+- [x] `app/pipeline.py` — 수집 루프 오케스트레이션
+- [x] `tests/unit/test_pipeline.py` — LLM 모킹. 허구 ID 주입, 무한 루프 방지
 
 **완료 기준**
 - CLI로 토픽 입력 시 MS-SQL에 이슈·이벤트·기사연결 저장
@@ -182,6 +186,10 @@ make mcp-inspect
 
 > **선행 검증**: 착수 직후 Gemini 구조화 출력과 도구 호출 최소 예제를 먼저 확인한다 ([PRD 공통 리스크](../REQUIREMENTS.md#7-공통-리스크)).
 
+`google-genai 1.75.0`과 `gemini-3.6-flash` 실제 API로 구조화 출력 Pydantic 파싱과 함수 호출을
+각각 확인했다. `gemini-2.5-flash`는 같은 계정에서 `404 NOT_FOUND`를 반환해 기본 모델과 문서
+계약을 함께 갱신했다.
+
 ---
 
 ## S6 · API 서버
@@ -189,16 +197,16 @@ make mcp-inspect
 | 관련 | ISS-001~006, ART-002, CHAT-001~006, NFR-07, EX-06 |
 |---|---|
 
-- [ ] `api/main.py`·`api/routes/` — FastAPI, CORS, `/health`
-- [ ] `api/deps.py` — **core ← infra 주입 지점**
-- [ ] `infra/mcp_client.py` — `langchain-mcp-adapters`
-- [ ] `app/agent.py` — LangGraph 그래프. `core.ports` 타입으로 주입받는다
-- [ ] 출처 구분 응답 (CHAT-004) — `token` 이벤트의 `source` 필드
-- [ ] 엔드포인트 ([`API.md`](../contracts/http-api.md))
-- [ ] SSE — 생성 진행(stage/round), 대화 토큰, 되묻기
-- [ ] 에이전트 실행 로그 (NFR-15)
-- [ ] `tests/integration/test_api.py`
-- [ ] 계층 규칙 검사 스크립트 — CI에 편입 (`AGENTS.md` §2.1)
+- [x] `api/main.py`·`api/routes/` — FastAPI, CORS, `/health`
+- [x] `api/deps.py` — **core ← infra 주입 지점**
+- [x] `infra/mcp_client.py` — MCP SDK v2 → LangChain 도구 브리지 ([ADR-0006](../decisions/0006-mcp-v2-langchain-tool-bridge.md))
+- [x] `app/agent.py` — LangGraph 그래프. `core.ports.ToolClient`로 주입받는다
+- [x] 출처 구분 응답 (CHAT-004) — `token` 이벤트의 `source` 필드
+- [x] S6 엔드포인트 — health·이슈 생성/목록/상세·기사·대화 ([`API.md`](../contracts/http-api.md))
+- [x] SSE — 생성 진행(stage/round), 대화 토큰, 되묻기
+- [x] 에이전트 실행 로그 (NFR-15)
+- [x] `tests/integration/test_api.py`
+- [x] 계층 규칙 검사 — 기존 import-linter 5개 계약과 `make check`에 편입
 
 **완료 기준**
 - Swagger에서 생성·조회·대화 전 기능 동작
@@ -207,6 +215,11 @@ make mcp-inspect
 - MCP 서버를 내린 상태에서 대화 요청 시 오류 반환, 저장소 직접 조회 없음
 - `app/`이 `infra`를 import하지 않음이 CI로 강제됨
 
+> MCP Python SDK v2를 필수로 유지하기 위해 아직 v2를 지원하지 않는
+> `langchain-mcp-adapters` 대신 MCP `inputSchema`를 `StructuredTool`로 변환하는 얇은 브리지를
+> 구현했다. 실제 MS-SQL·Qdrant·Gemini 성공 경로는 `.env`와 적재 데이터가 있는 환경에서
+> Swagger로 검증해야 하며, 모의 의존성 API 조립·MCP 장애·계층 경계는 자동 검사한다.
+
 ---
 
 ## S7 · 프론트엔드
@@ -214,18 +227,23 @@ make mcp-inspect
 | 관련 | 전 기능. 화면 기준은 [`SCREENS.md`](../product/screens.md) |
 |---|---|
 
-- [ ] `npm create vite@latest web -- --template vue-ts`
-- [ ] `.github/workflows/web.yml` — vue-tsc, build (S1-3에서 이월)
-- [ ] API 클라이언트 (SSE 수신 포함)
-- [ ] 이슈 목록 화면 — 생성 진행(라운드 표시), 되묻기 UI
-- [ ] 이슈 상세 화면 — 타임라인, **대표 기사 즉시 표시**, 근거 기사 목록
-- [ ] 대화 패널 — **출처별 표기 구분** (article / general)
-- [ ] 마크다운 렌더링
+- [x] `npm create vite@latest web -- --template vue-ts`
+- [x] `.github/workflows/web.yml` — vue-tsc, build (S1-3에서 이월)
+- [x] API 클라이언트 (SSE 수신 포함)
+- [x] 이슈 목록 화면 — 생성 진행(라운드 표시), 되묻기 UI
+- [x] 이슈 상세 화면 — 타임라인, **대표 기사 즉시 표시**, 근거 기사 목록
+- [x] 대화 패널 — **출처별 표기 구분** (article / general)
+- [x] 마크다운 렌더링
 
 **완료 기준**
-- 토픽 입력 → 생성 → 타임라인 → 근거 확인 → 대화 전 흐름 동작
-- 기사 근거와 일반 지식이 시각적으로 구분됨
-- `npm run build`, `vue-tsc --noEmit` 통과
+- [x] 토픽 입력 → 생성 → 타임라인 → 근거 확인 → 대화 전 흐름 연결
+- [x] 기사 근거와 일반 지식이 시각적으로 구분됨
+- [x] `npm run build`, `vue-tsc --noEmit` 통과
+
+`web/src/api/sse.ts`가 `fetch` 응답 스트림을 청크 경계와 무관하게 SSE 이벤트로 조립한다.
+생성 화면은 `clarify`의 `attempt`를 다음 요청의 `clarification_count`로 보내고, 상세 화면은 대화의
+참조 기사 ID를 해당 이벤트·기사 패널로 연결한다. 마크다운은 `marked`로 변환한 뒤 DOMPurify로
+정화해 표시하며, 웹 CI는 Node.js 22.19.0에서 잠금 파일 설치·타입 검사·빌드를 실행한다.
 
 ---
 
@@ -235,19 +253,19 @@ make mcp-inspect
 |---|---|
 
 ### S8-1 지식 그래프
-- [ ] P9 엔티티·관계 추출 ([`AI_SPEC.md`](../ai/specification.md) §2.10)
-- [ ] `articles.entities_extracted_at` 기반 추출 여부 판정
-- [ ] 기사 1건 단위 트랜잭션 저장
-- [ ] `GET /issues/{id}/graph` — SSE 추출 진행 + 기사별 그래프 반환
-- [ ] 프론트 그래프 시각화 — **기사별 분리 표시**
+- [x] P9 엔티티·관계 추출 ([`AI_SPEC.md`](../ai/specification.md) §2.10)
+- [x] `articles.entities_extracted_at` 기반 추출 여부 판정
+- [x] 기사 1건 단위 트랜잭션 저장
+- [x] `GET /issues/{id}/graph` — SSE 추출 진행 + 기사별 그래프 반환
+- [x] 프론트 그래프 시각화 — **기사별 분리 표시**
 
 ### S8-2 내보내기
-- [ ] 브리핑 마크다운 구성
-- [ ] PDF 변환
-- [ ] Notion 저장
-- [ ] `POST /issues/{id}/export`
-- [ ] MCP `export_briefing` 툴 — 대화 경로 (CHAT-006)
-- [ ] 화면 메뉴와 대화가 **같은 구현**을 호출하는지 확인
+- [x] 브리핑 마크다운 구성
+- [x] PDF 변환
+- [x] Notion 저장
+- [x] `POST /issues/{id}/export`
+- [x] MCP `export_briefing` 툴 — 대화 경로 (CHAT-006)
+- [x] 화면 메뉴와 대화가 **같은 구현**을 호출하는지 확인
 
 **완료 기준**
 - 기사별 그래프가 출처와 함께 표시됨
@@ -255,16 +273,21 @@ make mcp-inspect
 - 화면 메뉴와 대화 양쪽에서 PDF·Notion 내보내기 동작
 - 형식 미지정 시 되물음 (AC-016)
 
+`app/exporting.py`가 이슈 전체를 마크다운으로 한 번 구성하고 PDF·Notion 어댑터에 전달한다.
+HTTP 메뉴도 MCP `export_briefing`을 호출하므로 대화 도구와 구현이 갈라지지 않는다. PDF는
+`fpdf2`로 한글 TTF를 포함하고, 그래프 화면은 추가 런타임 의존성 없이 기사별 SVG를 그린다.
+기사당 노드가 30개를 넘으면 API 원본은 유지한 채 화면만 줄이고 그 사실을 표시한다.
+
 ---
 
 ## S9 · 마무리
 
-- [ ] CI 확장 — 서비스 컨테이너(MS-SQL, Qdrant)로 통합 테스트
-- [ ] E2E 테스트 — 생성 → 조회 → 근거 확인 → 대화 → 내보내기 ([PRD Success Metrics](../REQUIREMENTS.md#36-success-metrics))
-- [ ] CD — `api`·`mcp_server` 이미지 빌드 → GHCR 푸시
-- [ ] `README.md` — 아키텍처, 실행 절차, CI 배지
-- [ ] 클린 클론 재현 테스트 — `docker compose --profile full up -d` 한 줄 (NFR-13, 모드 B)
-- [ ] ADR 정리
+- [x] CI 확장 — 서비스 컨테이너(MS-SQL, Qdrant)로 통합 테스트
+- [x] E2E 테스트 — 생성 → 조회 → 근거 확인 → 대화 → 내보내기 ([PRD Success Metrics](../REQUIREMENTS.md#36-success-metrics))
+- [x] CD 워크플로 — `api`·`mcp_server` 이미지 빌드 → GHCR 푸시
+- [x] `README.md` — 아키텍처, 실행 절차, CI 배지
+- [x] 클린 클론 재현 테스트 — `docker compose --profile full up -d` 한 줄 (NFR-13, 모드 B)
+- [x] ADR 정리
 
 **완료 기준**
 - PR에서 lint·unit·integration·e2e·web 잡 모두 초록불
@@ -272,6 +295,12 @@ make mcp-inspect
 - 클린 클론에서 `docker compose --profile full up -d` 로 기동
 
 > CI에서 MS-SQL을 서비스 컨테이너로 띄우는 것이 이 스프린트의 학습 지점이다. 로컬은 네이티브, CI는 컨테이너인 이중 구성을 다루게 된다.
+
+로컬 완료 검증에서는 별도 빈 Compose 볼륨으로 전체 서비스를 기동해 마이그레이션 종료 코드 0,
+API·웹·MS-SQL·Qdrant 헬스 통과, 실제 통합 테스트와 E2E, 세 이미지 빌드를 확인했다. PR 잡과
+`v*` 태그의 실제 GHCR 게시 결과는 해당 커밋을 원격에 push한 뒤 GitHub Actions에서 확인한다.
+S2 전체 원본 직접 적재는 완료됐지만 S3 `scripts/03_build_vectors.py`의 미완료 상태는 S9
+픽스처 E2E가 대신하지 않으며, 위 S3 체크리스트에 계속 남긴다.
 
 ---
 

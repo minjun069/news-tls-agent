@@ -2,7 +2,9 @@
 
 관련 PRD: [`REQUIREMENTS.md`](../REQUIREMENTS.md) · 기술 설계서: [`TECH_DESIGN.md`](../architecture/overview.md)
 
-AI 기능은 둘이다. **타임라인 생성 파이프라인**(LLM 호출 9종)과 **이슈 질의 에이전트**(도구 호출 기반). 성격이 달라 따로 명세한다.
+AI 기능은 둘이다. **타임라인 생성 파이프라인**(S5의 P1~P8)과 **이슈 질의 에이전트**(도구 호출
+기반)다. P9 엔티티·관계 추출은 S8에서 그래프 조회 시 기사별로 실행한다. 성격이 달라 따로
+명세한다.
 
 ---
 
@@ -12,11 +14,17 @@ AI 기능은 둘이다. **타임라인 생성 파이프라인**(LLM 호출 9종)
 
 | 용도 | 모델 | 선택 근거 |
 |---|---|---|
-| 파이프라인 전 단계 | `gemini-2.5-flash` | 긴 입력(기사 다수)을 처리해야 하고 호출이 잦다 |
-| 질의 에이전트 | `gemini-2.5-flash` | 도구 호출 지원. 단일 provider로 설정 단순화 |
-| 임베딩 | `text-embedding-004` | `google-genai`, API 호출이라 GPU 불필요 |
+| 파이프라인 전 단계 | `gemini-3.6-flash` | 긴 입력(기사 다수)을 처리해야 하고 호출이 잦다 |
+| 질의 에이전트 | `gemini-3.6-flash` | 도구 호출 지원. 단일 provider로 설정 단순화 |
+| 임베딩 | `gemini-embedding-2` | `google-genai`, API 호출이라 GPU 불필요 |
 
 > provider가 Google로 고정된 것은 보유 API 키에 따른 **제약**이다. 기술적 우위 판단이 아니다.
+> 2026-09-04 실제 API 선행 검증에서 `gemini-2.5-flash`는 신규 사용자에게 제공되지 않아
+> `404 NOT_FOUND`를 반환했다. API가 안내한 `gemini-3.6-flash`로 구조화 출력과 함수 호출 최소
+> 요청을 각각 성공시켜 기본 모델을 갱신했다.
+> 같은 날 `text-embedding-004`도 `embedContent`에서 `404 NOT_FOUND`를 반환했다. 모델 목록에서
+> `embedContent`를 지원하는 안정 버전 `gemini-embedding-2`를 확인하고 `RETRIEVAL_QUERY` 실제
+> 요청으로 기본 3,072차원 벡터를 검증해 임베딩 기본값을 갱신했다.
 
 ### 1.2 출력 형식
 
@@ -66,6 +74,7 @@ AI 기능은 둘이다. **타임라인 생성 파이프라인**(LLM 호출 9종)
 - 사건을 특정할 수 없으면 되묻는다. 임의로 좁히지 않는다
 - 되묻는 질문은 하나만 한다. 여러 개를 나열하지 않는다
 - 되묻기 횟수가 상한에 도달하면 해석된 의도로 진행한다 ([PRD 공통 리스크](../REQUIREMENTS.md#7-공통-리스크))
+- 기본 되묻기 상한은 2회이며 `TIMELINE_MAX_CLARIFICATIONS`로 조정한다
 
 ### 2.3 P2 · 가상 타임라인 생성
 
@@ -192,6 +201,11 @@ CONTENT: {본문}
 - 엔티티 목록 (표기, 유형)
 - 관계 목록 (주체, 대상, 관계 유형)
 
+구조화 출력 필드는 `entities[].name`, `entities[].entity_type`, `relations[].source`,
+`relations[].target`, `relations[].relation_type`이다. `source`와 `target`은 별도 ID를 생성하지 않고
+같은 응답의 `entities[].name` 표기를 정확히 참조한다. 애플리케이션은 중복 엔티티 표기와 목록에
+없는 관계 끝점을 Pydantic 검증에서 거부한 뒤에만 저장소를 호출한다.
+
 **지시 요점**
 - 기사에 등장하는 표기를 **그대로** 사용한다. 정식 명칭으로 바꾸지 않는다
 - 기사에 서술된 관계만 추출한다. 일반 상식으로 연결하지 않는다
@@ -224,6 +238,11 @@ CONTENT: {본문}
 
 툴 description과 스키마는 [`MCP_TOOLS.md`](../contracts/mcp-tools.md)를 원천으로 한다.
 
+API 서버의 `infra/mcp_client.py`는 MCP SDK v2로 `tools/list`를 호출하고 각 `inputSchema`를
+LangChain `StructuredTool`로 변환한다. 대화 에이전트는 이 목록만 받아 LangGraph 기반
+`create_agent`에 전달하며 저장소 어댑터를 받지 않는다. 이 브리지 선택의 배경은
+[ADR-0006](../decisions/0006-mcp-v2-langchain-tool-bridge.md)를 따른다.
+
 관련 결정: [ADR-0001](../decisions/0001-mcp-data-access.md), [ADR-0004](../decisions/0004-export-intent-via-tool.md)
 
 ### 3.3 프롬프트 요점
@@ -249,6 +268,10 @@ CONTENT: {본문}
 
 화면 표기 방식은 [`SCREENS.md`](../product/screens.md)를 원천으로 한다.
 
+모델 출력에는 문단 시작 표식 `ARTICLE:`과 `GENERAL:`을 강제한다. `app/agent.py`가 분할된
+스트리밍 토큰에서도 이 표식을 제거하고 HTTP SSE의 `source: article | general`로 바꾼다.
+표식이 없는 문단은 기사 근거로 승격하지 않고 `general`로 처리한다.
+
 ---
 
 ## 4. Embedding 및 Vector Search
@@ -264,7 +287,7 @@ CONTENT: {본문}
 | 항목 | 값 |
 |---|---|
 | 컬렉션명 | `articles` |
-| dense named vector | `dense`, Cosine, 차원은 임베딩 모델 기준으로 착수 시 확인 |
+| dense named vector | `dense`, Cosine, `gemini-embedding-2` 기본 출력 3,072차원 |
 | sparse named vector | `bm25`, Qdrant BM25, IDF modifier |
 | BM25 텍스트 처리 | multilingual tokenizer, stemmer 없음, stopwords 없음 |
 | payload | `article_id`, `service_date`, `title`, `category_middle` |

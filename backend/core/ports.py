@@ -5,19 +5,30 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from typing import Protocol
+from collections.abc import Mapping, Sequence
+from typing import Protocol, TypeVar
+
+from pydantic import BaseModel
 
 from core.models import (
     Article,
+    ArticleGraph,
+    ArticleGraphExtraction,
+    ArticleSearchRequest,
     IssueCitation,
     IssueCreate,
     IssueDetail,
+    IssueSummary,
     KeywordQuery,
+    NotionPage,
     SearchHit,
     SearchOptions,
+    SearchResult,
     VectorPoint,
 )
+
+StructuredResponse = TypeVar("StructuredResponse", bound=BaseModel)
+AgentTool = TypeVar("AgentTool")
 
 
 class EmbeddingProvider(Protocol):
@@ -54,6 +65,50 @@ class VectorStore(Protocol):
         ...
 
 
+class PlannedArticleSearcher(Protocol):
+    def search_request(self, request: ArticleSearchRequest) -> SearchResult:
+        """P3가 선택한 방식별 입력과 기간을 그대로 실행한다."""
+        ...
+
+
+class StructuredGenerator(Protocol):
+    def generate(
+        self,
+        prompt: str,
+        response_type: type[StructuredResponse],
+    ) -> StructuredResponse:
+        """프롬프트 결과를 지정한 Pydantic 모델로 검증해 반환한다."""
+        ...
+
+
+class PdfRenderer(Protocol):
+    def render(self, markdown: str, output_path: str) -> None:
+        """브리핑 마크다운을 한글 글꼴이 포함된 PDF 파일로 원자적으로 쓴다."""
+        ...
+
+
+class NotionPublisher(Protocol):
+    def publish(self, title: str, markdown: str, parent_page_id: str) -> NotionPage:
+        """지정 상위 페이지 아래에 브리핑 페이지를 만들고 식별자와 URL을 반환한다."""
+        ...
+
+
+class ToolClient(Protocol[AgentTool]):
+    """MCP 도구를 에이전트와 HTTP 어댑터에 제공하는 비동기 포트."""
+
+    async def get_tools(self) -> Sequence[AgentTool]:
+        """MCP 스키마를 에이전트 프레임워크의 도구 목록으로 변환한다."""
+        ...
+
+    async def call_tool(
+        self,
+        name: str,
+        arguments: Mapping[str, object] | None = None,
+    ) -> Mapping[str, object]:
+        """이름과 구조화 인자로 MCP 도구를 호출한다."""
+        ...
+
+
 class Repository(Protocol):
     def upsert_articles(self, articles: Sequence[Article]) -> int:
         """기사를 ID 기준으로 추가하거나 덮어쓰고 처리 건수를 반환한다."""
@@ -75,10 +130,26 @@ class Repository(Protocol):
         """이슈 상세와 이벤트별 대표 기사를 조회한다."""
         ...
 
+    def list_issues(self) -> list[IssueSummary]:
+        """생성 시각 내림차순으로 이슈 목록과 이벤트 수를 반환한다."""
+        ...
+
     def find_issue_by_topic(self, topic: str) -> IssueDetail | None:
         """재사용할 기존 이슈를 토픽으로 찾는다."""
         ...
 
     def find_issues_by_article(self, article_id: int) -> list[IssueCitation]:
         """특정 기사를 인용한 이슈·이벤트를 역방향으로 조회한다."""
+        ...
+
+    def replace_article_graph(
+        self,
+        article_id: int,
+        extraction: ArticleGraphExtraction,
+    ) -> None:
+        """기사 엔티티·관계·추출 완료 시각을 한 트랜잭션으로 교체한다."""
+        ...
+
+    def get_article_graph(self, article_id: int) -> ArticleGraph | None:
+        """기사 메타데이터와 저장된 노드·간선을 함께 반환한다."""
         ...
