@@ -90,6 +90,7 @@ make migrate
 cd backend
 uv run python -m scripts.01_validate_raw ../data/raw/news.jsonl
 uv run python -m scripts.02_load_mssql ../data/raw/news.jsonl --batch-size 200
+uv run python -m scripts.03_build_vectors ../data/raw/news.jsonl --batch-size 32
 ```
 
 루트에서 API를 실행한다.
@@ -118,9 +119,10 @@ make mcp-inspect
 
 서비스 기동과 뉴스 적재는 별도다. 실제 원본 `news.jsonl` 필드(`article_title`,
 `article_service_daytime`, `text` 등)를 검증·정규화해 MS-SQL에 직접 배치 적재하는 S2 경로는
-완료됐다. `scripts/03_build_vectors.py`와 실제 Qdrant `articles` 컬렉션 적재는 아직 완료되지
-않았다. 따라서 S9 E2E는 고정 기사 픽스처로 제품 흐름을 검증하지만 실제 벡터 검색 준비 완료를
-의미하지 않는다.
+완료됐다. `scripts/03_build_vectors.py`는 같은 원본을 스트리밍해 선택한 dense 공급자와 Qdrant
+BM25를 배치 적재하고, 재시도·재개·전체 ID 대조 결과를 JSON으로 출력한다. 기본 공급자는 로컬
+KURE-v1이라 기사 내용을 외부로 전송하지 않는다. `EMBEDDING_PROVIDER=gemini`를 명시한 경우에만
+Google API 전송 권한과 한도를 확인한다. dense 없이 BM25만 준비하려면 `--sparse-only`를 쓴다.
 
 전체 데이터 경로와 현재 경계는 다음과 같다.
 
@@ -128,8 +130,14 @@ make mcp-inspect
 data/raw/*.jsonl
   → scripts/01_validate_raw.py
   → scripts/02_load_mssql.py → MS-SQL
-  → scripts/03_build_vectors.py → Qdrant  (미구현)
+  → scripts/03_build_vectors.py → Qdrant
 ```
+
+기존 `articles` 컬렉션에는 실제 원본과 ID가 일치하는 BM25 포인트 178,887건과 Gemini dense
+포인트 900건이 보존돼 있다. 로컬 KURE-v1용 `articles_kure_v1`에는 원본과 ID가 일치하는
+1,024차원 dense·BM25 포인트 178,887건이 적재됐으며 `.env`는 이 컬렉션과 로컬 공급자를
+가리킨다. 같은 적재 명령을 다시 실행하면 dense 178,887건을 모두 건너뛴다. 선택 근거와 복구 방법은
+[`ADR-0008`](docs/decisions/0008-local-kure-embedding.md)을 따른다.
 
 현 상태와 입력·제외·정합성 계약은
 [`docs/data/source-and-ingestion.md`](docs/data/source-and-ingestion.md) 및

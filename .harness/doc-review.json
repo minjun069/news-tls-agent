@@ -9,6 +9,12 @@
       },
       "reason": "SqlRepository.list_issues는 schema.md §4.2의 기존 이슈 목록 질의를 구현하고, IssueSummary와 app/search.py는 source-and-ingestion.md의 적재 형식 및 ai/specification.md §4의 keyword·semantic·RRF 입력·출력 계약을 변경하지 않는다."
     },
+    "MCP tool contract": {
+      "files": {
+        "backend/mcp_server/server.py": "69ea7bf0ff11c3a311b7c876c4dd019f408374c89dec0b9650e61947f7d508cf"
+      },
+      "reason": "MCP search_articles 입력·출력·도구 수는 유지되고 서버 조립점의 EmbeddingProvider 구현 선택만 설정화됨"
+    },
     "MS-SQL schema and repository": {
       "files": {
         "backend/infra/repository.py": "11f177f12611e0d75312d3f19e0a2d7f26d9aee0777dbca64780ecfb3ec208e3"

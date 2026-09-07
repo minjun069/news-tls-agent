@@ -16,15 +16,16 @@ AI 기능은 둘이다. **타임라인 생성 파이프라인**(S5의 P1~P8)과 
 |---|---|---|
 | 파이프라인 전 단계 | `gemini-3.6-flash` | 긴 입력(기사 다수)을 처리해야 하고 호출이 잦다 |
 | 질의 에이전트 | `gemini-3.6-flash` | 도구 호출 지원. 단일 provider로 설정 단순화 |
-| 임베딩 | `gemini-embedding-2` | `google-genai`, API 호출이라 GPU 불필요 |
+| 임베딩 | 로컬 `nlpai-lab/KURE-v1` | 한국어 뉴스 CPU 표본에서 품질 유지·Qwen 대비 6.4배 처리량 |
 
-> provider가 Google로 고정된 것은 보유 API 키에 따른 **제약**이다. 기술적 우위 판단이 아니다.
 > 2026-09-04 실제 API 선행 검증에서 `gemini-2.5-flash`는 신규 사용자에게 제공되지 않아
 > `404 NOT_FOUND`를 반환했다. API가 안내한 `gemini-3.6-flash`로 구조화 출력과 함수 호출 최소
 > 요청을 각각 성공시켜 기본 모델을 갱신했다.
 > 같은 날 `text-embedding-004`도 `embedContent`에서 `404 NOT_FOUND`를 반환했다. 모델 목록에서
-> `embedContent`를 지원하는 안정 버전 `gemini-embedding-2`를 확인하고 `RETRIEVAL_QUERY` 실제
-> 요청으로 기본 3,072차원 벡터를 검증해 임베딩 기본값을 갱신했다.
+> `embedContent`를 지원하는 안정 버전 `gemini-embedding-2`를 확인하고 실제 요청으로 기본
+> 3,072차원 벡터를 검증했다. 이후 무료 일일 한도로 전체 적재가 불가능해 로컬 KURE-v1을
+> 기본 운영 공급자로 바꿨으며, Gemini 경로는 설정 선택지로 유지한다
+> ([ADR-0008](../decisions/0008-local-kure-embedding.md)).
 
 ### 1.2 출력 형식
 
@@ -280,14 +281,19 @@ LangChain `StructuredTool`로 변환한다. 대화 에이전트는 이 목록만
 
 기사 1건이 벡터 1개에 대응한다. 임베딩 텍스트는 `제목 + 요약 + 본문`을 결합해 구성한다.
 
-> 청킹하지 않는다. 시드 규모가 작고, 근거 귀속이 기사 단위이므로 **기사와 벡터를 1:1로 유지**하는 편이 단순하다.
+> 청킹하지 않는다. 근거 귀속과 원본 복원이 기사 ID 단위이므로 **기사와 벡터를 1:1로 유지**한다.
+
+로컬 KURE-v1은 결합 문자열을 접두어 없이 받고 토크나이저 기준 앞 256토큰만 사용한다. 제목과
+요약이 본문보다 앞에 오므로 식별 정보와 기사 요지가 우선된다. 기사와 포인트의 1:1 귀속을
+유지하기 위해 초과 기사를 여러 포인트로 나누지 않는다. Gemini를 선택하면 기존 8,192토큰
+상한과 문서 접두어를 적용한다.
 
 ### 4.2 컬렉션 설계
 
 | 항목 | 값 |
 |---|---|
-| 컬렉션명 | `articles` |
-| dense named vector | `dense`, Cosine, `gemini-embedding-2` 기본 출력 3,072차원 |
+| 컬렉션명 | `articles_kure_v1` (기존 Gemini 컬렉션은 `articles`) |
+| dense named vector | `dense`, Cosine, 로컬 기본 1,024차원 |
 | sparse named vector | `bm25`, Qdrant BM25, IDF modifier |
 | BM25 텍스트 처리 | multilingual tokenizer, stemmer 없음, stopwords 없음 |
 | payload | `article_id`, `service_date`, `title`, `category_middle` |
@@ -297,9 +303,35 @@ LangChain `StructuredTool`로 변환한다. 대화 에이전트는 이 목록만
 차원·Cosine 거리·BM25 IDF 구성과 다르면 재생성하지 않고 구성 오류를 반환한다.
 
 `title + summary + content` 결합 문자열은 dense와 BM25 vector 생성에 모두 쓰지만 payload에는
-저장하지 않는다. dense 임베딩이 실패한 기사도 `bm25`만 적재해 키워드 검색 대상으로 남긴다.
-Gemini 호출은 문서 배치에 `RETRIEVAL_DOCUMENT`, 검색 질의에 `RETRIEVAL_QUERY` task type을
-사용한다. API 오류와 Qdrant SDK 오류는 어댑터에서 삼키지 않아 상위 호출자가 재시도를 결정한다.
+저장하지 않는다. BM25는 문자열 전체를 사용하고, 로컬 dense만 256토큰으로 자른다. KURE-v1
+문서와 질의에는 접두어를 붙이지 않으며 둘 다 L2 정규화한다. dense 임베딩이 실패한 기사도
+`bm25`만 적재해 키워드 검색 대상으로 남긴다.
+
+`EMBEDDING_PROVIDER=gemini`이면 기존 `gemini-embedding-2` 경로를 사용한다. 이 모델은
+`task_type`을 지원하지 않으므로 문서는 `title: none | text: ...`, 질의는
+`task: search result | query: ...` 형식으로 구분한다. 문서 배치는 문자열 목록을 그대로 넘기지
+않고 기사마다 별도 SDK `Content` 객체로 감싸야 기사별 벡터가 각각 반환된다. 임베딩 공급자와
+Qdrant SDK 오류는 어댑터에서 삼키지 않아 적재 스크립트가 유한 지수 백오프 재시도를 수행한다.
+개별 배치가 최종 실패하면 해당 기사는 BM25 전용으로 남기지만, Gemini 일일 한도 소진은 이후
+모든 배치에 영향을 주므로 즉시 중단한다. 한도 초기화나 사용 등급 변경 후에는 dense가 없는 기사
+ID만 다시 임베딩한다. 로컬 공급자도 같은 재개 계약을 사용한다.
+
+| 설정 | 로컬 권장값 | 의미 |
+|---|---|---|
+| `EMBEDDING_PROVIDER` | `local` | `local` 또는 `gemini` |
+| `LOCAL_EMBEDDING_MODEL` | `nlpai-lab/KURE-v1` | Sentence Transformers 모델 ID |
+| `LOCAL_EMBEDDING_DIMENSIONS` | `1024` | Qdrant dense 차원과 일치해야 함 |
+| `LOCAL_EMBEDDING_NORMALIZE` | `true` | 문서·질의 L2 정규화 |
+| `LOCAL_EMBEDDING_MAX_SEQ_LENGTH` | `256` | dense 토큰 상한 |
+| `LOCAL_EMBEDDING_BATCH_SIZE` | `4` | 모델 내부 CPU 배치 |
+| `LOCAL_EMBEDDING_DEVICE` | `cpu` | 추론 장치 |
+| `LOCAL_EMBEDDING_THREADS` | `10` | PyTorch CPU 스레드 |
+| `LOCAL_EMBEDDING_QUERY_PROMPT` | 빈 문자열 | KURE-v1 질의 접두어 없음 |
+
+현재 `articles_kure_v1`에는 이 설정으로 생성한 dense·BM25 포인트 178,887건이 있고 원본 대비
+누락·초과·sparse-only가 없다. 기본 재실행에서 178,887건의 dense 존재 여부를 확인해 모두
+건너뛰었으며 새 임베딩과 upsert는 발생하지 않았다. 실제 MCP 비교에서는 정확 용어 질의의
+keyword, 서술형 질의의 semantic, 두 순위를 합친 hybrid가 서로 다른 상위 목록을 반환했다.
 
 payload에 `service_date`를 두는 이유는 **기간 필터를 검색 단계에서 적용**하기 위함이다
 (NFR-05). 키워드와 의미 검색 모두 Qdrant query filter로 기간을 먼저 제한한 뒤 `top_k`를
@@ -330,7 +362,8 @@ score(d) = Σ  1 / (k + rank_i(d))
 계산한다.
 
 관련 결정: [ADR-0003](../decisions/0003-search-strategies.md),
-[ADR-0005](../decisions/0005-qdrant-dense-sparse-search.md)
+[ADR-0005](../decisions/0005-qdrant-dense-sparse-search.md),
+[ADR-0008](../decisions/0008-local-kure-embedding.md)
 
 ---
 

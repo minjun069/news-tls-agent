@@ -15,14 +15,18 @@
 S3의 목표는 BM25 키워드 검색, Qdrant 의미 검색, RRF(Reciprocal Rank Fusion) 결합 검색을
 각각 호출할 수 있게 만들고, 기간 필터를 각 검색 단계에서 `top_k`보다 먼저 적용하는 것이다.
 
-계획 작성 시점의 전제는 다음과 같다.
+현재 전제는 다음과 같다.
 
-- S2와 S3 브랜치는 `2d9c54d`에서 분기했다.
-- S2의 실제 원본 필드 매핑과 최종 `data/seed/<topic>.articles.jsonl` 생성은 아직 완료되지 않았다.
-- `backend/infra/qdrant.py`, `backend/infra/embedding.py`, `backend/app/search.py`,
-  `backend/scripts/03_build_vectors.py`는 아직 없다.
-- 따라서 S2 진행 중에는 순수 계산·검색 계약·모의 어댑터까지만 구현하고, 실제 기사 임베딩과
-  저장소 통합은 S2 산출물 이후에 수행한다.
+- S2는 중간 seed 없이 `data/raw/news.jsonl`을 직접 정규화해 MS-SQL에 적재한다.
+- S3-P1~P3 검색 계약·RRF·Qdrant·임베딩 어댑터와 S3-A4 검색 조립은 완료됐다.
+- `backend/scripts/03_build_vectors.py`는 실제 원본 스트리밍, 배치 임베딩, 재시도, 재개 적재,
+  전체 ID 대조를 구현한다.
+- 로컬 Qdrant에는 178,887건의 BM25 포인트가 적재됐고 원본과 누락·초과 ID가 없음을 확인했다.
+- 기존 `articles`에 Gemini dense 900건을 보존한다. 무료 한도로 전체 적재가 불가능해 KURE-v1과
+  Qwen3-Embedding-0.6B를 CPU 표본 측정했고, KURE-v1 1,024차원·256토큰·정규화를 선택했다.
+- `articles_kure_v1`에 로컬 dense·BM25 178,887건을 적재했다. 원본 대비 누락·초과·sparse-only는
+  모두 0건이고, 같은 명령 재실행은 dense 178,887건을 모두 건너뛰어 upsert 0건으로 끝났다.
+- 실제 MCP에서 keyword·semantic·hybrid 결과 차이, 기간 선필터, MS-SQL 기사 복원을 확인했다.
 
 ## 2. 전체 의존 순서
 
@@ -105,7 +109,7 @@ ADR-0003에서 제외한 검색기별 가중치와 `k` 튜닝은 추가하지 �
 |---|---|
 | 관련 | NFR-04, NFR-05 |
 | 산출물 | `backend/infra/qdrant.py`, `backend/infra/embedding.py`, 단위 테스트, 의존성·설정 |
-| 상태 | 완료 — Qdrant 1.19.x·Google Gen AI 어댑터와 모의 SDK 검증 반영 |
+| 상태 | 완료 — Qdrant 1.19.x·Gemini·로컬 KURE 어댑터와 모의 SDK 검증 반영 |
 | 권장 모델 | `gpt-5.6-terra` |
 | 추론 수준 | `high` |
 
@@ -120,16 +124,19 @@ ADR-0003에서 제외한 검색기별 가중치와 `k` 튜닝은 추가하지 �
 - SDK 예외를 삼키지 않고 호출자가 재시도 여부를 판단할 수 있는 오류 경계
 
 실제 API 확인 결과 `text-embedding-004`는 `embedContent`에서 `404 NOT_FOUND`를 반환했다.
-현재 지원되는 안정 모델 `gemini-embedding-2`의 `RETRIEVAL_QUERY` 호출은 성공했고 기본 출력은
-3,072차원이다. Qdrant 컬렉션은 이 실측 차원으로 생성하며, 다른 출력 차원을 명시적으로
-설정하면 기존 컬렉션 구성 검사도 같은 값으로 수행한다.
+현재 지원되는 안정 모델 `gemini-embedding-2`는 문서와 질의를 접두 형식으로 구분한다. 별도
+`Content` 객체 두 건을 한 배치로 보낸 실호출에서 3,072차원 벡터 두 건이 반환됐다. Qdrant
+컬렉션은 `GEMINI_EMBEDDING_DIMENSIONS` 차원으로 생성하며 기존 컬렉션 구성도 같은 값으로 검사한다.
+
+이후 [ADR-0008](../decisions/0008-local-kure-embedding.md)이 dense 기본 공급자 결정을 대체했다.
+공용 `EmbeddingProvider` 포트는 유지하고 설정 조립점에서 KURE-v1과 Gemini를 선택한다.
 
 ### 병렬 기간의 명시적 제외 범위
 
 아래 항목은 S2 산출물을 입력으로 확인하기 전에는 구현하거나 완료 처리하지 않는다.
 
 - `backend/scripts/03_build_vectors.py` 구현과 실제 실행
-- 실제 시드 배치 임베딩 API 호출과 실제 Qdrant 포인트 적재
+- 실제 원본 배치 임베딩 API 호출과 실제 Qdrant 포인트 적재
 - 실제 Qdrant에서 BM25 인덱싱·OR·AND·기간 필터 검증
 - `backend/app/search.py`의 세 검색 방식 조립
 - 실데이터 기간 필터 및 세 방식 결과 비교
@@ -141,24 +148,26 @@ ADR-0003에서 제외한 검색기별 가중치와 `k` 튜닝은 추가하지 �
 
 | 항목 | 내용 |
 |---|---|
-| 입력 | S2 완료 커밋, `data/seed/<topic>.articles.jsonl`, MS-SQL `articles` |
+| 입력 | S2 완료 커밋, `data/raw/news.jsonl`, MS-SQL `articles` |
+| 상태 | 완료 — 실제 원본 178,887행·고유 ID·정규화 결과와 S2 적재 기록 대조 |
 | 권장 모델 | `gpt-5.6-terra` |
 | 추론 수준 | `medium` |
 
 S2 완료 커밋을 S3 브랜치에 병합한 뒤 파일 존재를 Git 상태로 추론하지 않고 직접 확인한다.
-각 시드 파일의 경로·크기·행 수·JSON 파싱·필드 스키마와 표본을 검사하고, MS-SQL은 카탈로그와
-쿼리로 실제 기사 수를 확인한다. 불일치가 있으면 벡터 적재로 진행하지 않고 S2 계약과 산출물 중
-어느 쪽이 다른지 먼저 해결한다.
+원본 파일의 경로·크기·행 수·JSON 파싱·필드 스키마와 표본을 검사한다. MS-SQL은 S2 적재 기록과
+MCP 검색 결과의 기사 복원으로 대조하며, 런타임 MCP 계약에 없는 전체 행 수를 직접 SQL로 우회해
+조회하지 않는다.
 
 ### S3-A2 · BM25 실데이터 검증
 
 | 항목 | 내용 |
 |---|---|
 | 입력 | P1 계약, P3 Qdrant 어댑터, A1에서 확인한 기사 집합 |
+| 상태 | 완료 — 실제 178,887건 BM25 적재, MCP 기간 검색과 MS-SQL 기사 복원 확인 |
 | 권장 모델 | `gpt-5.6-sol` |
 | 추론 수준 | `high` |
 
-P3가 구현한 Qdrant 어댑터를 실제 시드와 컨테이너에 연결해 BM25 인덱싱, multilingual
+P3가 구현한 Qdrant 어댑터를 실제 원본과 컨테이너에 연결해 BM25 인덱싱, multilingual
 tokenizer, OR·AND 조합, 기간 선필터가 계약대로 동작하는지 검증한다. 같은 입력과 인덱스에서
 결과가 결정론적이어야 하며, 검색 후 날짜를 제거하는 방식은 허용하지 않는다.
 
@@ -166,11 +175,12 @@ tokenizer, OR·AND 조합, 기간 선필터가 계약대로 동작하는지 검�
 
 | 항목 | 내용 |
 |---|---|
-| 산출물 | `backend/scripts/03_build_vectors.py`, 실제 Qdrant `articles` 컬렉션 |
+| 산출물 | `backend/scripts/03_build_vectors.py`, 실제 Qdrant `articles_kure_v1` 컬렉션 |
+| 상태 | 완료 — 전체 KURE dense·BM25 적재, 원본 ID 대조와 멱등 재실행 확인 |
 | 권장 모델 | `gpt-5.6-terra` |
 | 추론 수준 | `high` |
 
-시드 기사에서 `제목 + 요약 + 본문`을 결합하고 배치 임베딩, 지수 백오프 재시도, 컬렉션 생성,
+원본 기사에서 `제목 + 요약 + 본문`을 결합하고 배치 임베딩, 지수 백오프 재시도, 컬렉션 생성,
 포인트 upsert를 수행한다. 첫 실호출로 임베딩 모델과 벡터 차원을 확인해 설정·AI 명세를 같은
 변경에서 갱신한다. 재실행 전후 포인트 수와 ID 집합을 비교해 멱등성을 검증한다.
 
@@ -179,6 +189,7 @@ tokenizer, OR·AND 조합, 기간 선필터가 계약대로 동작하는지 검�
 | 항목 | 내용 |
 |---|---|
 | 산출물 | `backend/app/search.py`, 모의 포트 단위 테스트 |
+| 상태 | 완료 — keyword·semantic·hybrid 선택과 RRF 조립 반영 |
 | 권장 모델 | `gpt-5.6-sol` |
 | 추론 수준 | `high` |
 
@@ -190,6 +201,7 @@ RRF를 사용한다. 검색기가 반환한 ID는 Repository에서 원문 메타
 
 | 항목 | 내용 |
 |---|---|
+| 상태 | 완료 — 전체 원본의 세 방식 비교, 기간 선필터와 MS-SQL 복원 확인 |
 | 권장 모델 | `gpt-5.6-sol` |
 | 추론 수준 | 기본 `high`, 품질 원인 분석이 필요할 때만 `xhigh` |
 
@@ -205,15 +217,28 @@ RRF를 사용한다. 검색기가 반환한 ID는 Repository에서 원문 메타
 `make check`와 Qdrant·MS-SQL이 필요한 관련 통합 검사를 실행한다. 비교 결과가 기대와 다를
 때만 `xhigh`로 토큰화·질의·필터·RRF 입력을 추적하며, 높은 추론 수준을 기본값으로 쓰지 않는다.
 
+실제 MCP 비교에서 `계엄`, `통신사 고객 유심 정보가 유출된 사고`, `의대 정원 확대를 둘러싼
+정부와 의료계 갈등`을 같은 기간·`top_k=5`로 세 방식에 전달했다. 세 질의 모두 각 방식이 5건을
+반환했고 상위 ID·순서가 서로 달랐다. 정확 용어 질의는 BM25가 일치 기사를 찾았고, 서술형
+질의는 semantic이 SKT 고객정보 유출 및 의정 갈등 기사를 직접 보완했으며, hybrid는 두 목록을
+RRF로 결합했다. 반환된 45개 결과는 모두 MS-SQL 요약을 포함했다. 데이터 범위 밖인 2024년으로
+제한한 `계엄` 질의는 세 방식 모두 0건을 반환해 검색 전 기간 필터를 확인했다.
+
 ### S3-A6 · 종료 정리
 
 | 항목 | 내용 |
 |---|---|
+| 상태 | 완료 — 실제 적재·검색 근거 반영과 전체 종료 검증 통과 |
 | 권장 모델 | `gpt-5.6-luna` |
 | 추론 수준 | `medium` |
 
 변경 파일을 직접 다시 읽고 로드맵의 S3 체크리스트와 완료 기준을 검증 결과에 맞게 갱신한다.
 종료 보고에는 문제, 미검증, 사용자 작업, 검증 결과를 각각 적고 없으면 `없음`이라고 쓴다.
+
+종료 검증은 `make check` 125건, `make test-integration` 19건, `make test-all` 138건 통과와
+`make compose-check`, `make images` 성공으로 확인했다. 전체 적재 결과는 `collection_point_count=178887`,
+`missing_point_count=0`, `unexpected_point_count=0`, `sparse_only_count=0`이고, 멱등 재실행은
+`skipped_dense_count=178887`, `embedded_article_count=0`, `upserted_point_count=0`이다.
 
 ## 5. 모델 배정 원칙
 

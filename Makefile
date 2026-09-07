@@ -5,7 +5,7 @@ BE := backend
 WEB := web
 NPM ?= npm
 
-.PHONY: help install web-install check fmt lint arch test test-integration test-e2e test-all doc-sync doc-ack docs-for agent-budget compose-check images up up-full down migrate mcp-inspect api web web-check
+.PHONY: help install web-install check fmt lint arch test test-integration test-e2e test-all doc-sync doc-ack docs-for agent-budget benchmark-embeddings compose-check images up up-full down migrate mcp-inspect api web web-check
 
 help:
 	@echo "install       backend .venv 생성 (uv)"
@@ -16,6 +16,7 @@ help:
 	@echo "doc-ack       REASON='근거'로 계약 변경 없음 검토 기록"
 	@echo "docs-for      PATHS='경로 ...'에 필요한 계약 문서 출력"
 	@echo "agent-budget  AGENTS.md 현재 크기 보고(강제 기준 없음)"
+	@echo "benchmark-embeddings  MODEL='모델 ID' 실제 뉴스 CPU 임베딩 표본 측정"
 	@echo "test-all      MS-SQL · Qdrant 포함 통합 테스트"
 	@echo "test-integration  실제 MS-SQL · Qdrant 통합 테스트"
 	@echo "test-e2e      생성부터 그래프·내보내기까지 사용자 흐름"
@@ -71,6 +72,9 @@ docs-for:
 
 agent-budget:
 	@python3 .harness/report_agent_budget.py
+
+benchmark-embeddings:
+	cd $(BE) && uv run python -m scripts.benchmark_local_embeddings "$(MODEL)" ../data/raw/news.jsonl
 
 compose-check:
 	docker compose --profile full config --quiet

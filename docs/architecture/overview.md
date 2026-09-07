@@ -79,7 +79,7 @@
 | Vector DB | Qdrant | Docker 컨테이너 |
 | Search Engine | Qdrant BM25 · dense 벡터 · core RRF **3종 모두 구현** | 에이전트가 선택하거나 전부 수행 (NFR-04) |
 | AI | Google Gemini (`gemini-3.6-flash`) | 보유 키와 실제 API 가용성 기준 |
-| Embedding | Google `gemini-embedding-2` | 실제 API 기본 출력 3,072차원 확인 |
+| Embedding | 로컬 `nlpai-lab/KURE-v1` (Gemini 선택 가능) | CPU 실측으로 1,024차원·정규화 계약 채택, [ADR-0008](../decisions/0008-local-kure-embedding.md) |
 | Agent | LangGraph 기반 LangChain `create_agent` | MCP 도구 호출·토큰 스트리밍 |
 | MCP | `mcp` v2 (`MCPServer`, `ClientSession`) + LangChain 도구 브리지 | stdio 전송, [ADR-0006](../decisions/0006-mcp-v2-langchain-tool-bridge.md) |
 | PDF 생성 | `fpdf2` + 환경별 한글 TTF 포함 | EXP-001 |
@@ -137,9 +137,11 @@
 - 검증: 세 방식이 각각 호출 가능하고, 에이전트가 방식을 선택한 기록이 남음
 - 관련: CHAT-002, [타임라인 요구사항](../requirements/timeline.md), [ADR-0003](../decisions/0003-search-strategies.md)
 
-BM25와 의미 검색은 Qdrant `articles` 컬렉션의 sparse `bm25`와 dense `dense` named vector로
-구현한다. 두 결과는 core 타입으로 변환한 뒤 애플리케이션의 순수 RRF 함수로 결합한다.
-상세 결정은 [ADR-0005](../decisions/0005-qdrant-dense-sparse-search.md)를 따른다.
+BM25와 의미 검색은 공급자별 Qdrant 컬렉션의 sparse `bm25`와 dense `dense` named vector로
+구현한다. 로컬 기본 컬렉션은 `articles_kure_v1`이고 기존 Gemini `articles`는 보존한다. 두
+검색 결과는 core 타입으로 변환한 뒤 애플리케이션의 순수 RRF 함수로 결합한다.
+상세 결정은 [ADR-0005](../decisions/0005-qdrant-dense-sparse-search.md)와 dense 공급자를 보완한
+[ADR-0008](../decisions/0008-local-kure-embedding.md)을 따른다.
 
 > 한 방식으로 고정하지 않는 이유: 뉴스 도메인은 고유명사·날짜처럼 정확 일치가 필요한 질의와, 표현이 다른 개념 질의가 섞여 있다. 어느 하나가 항상 낫지 않다.
 
@@ -251,6 +253,9 @@ docker compose --profile full up -d
 
 `docker-compose.yml`에서 `qdrant`만 프로필이 없고, `mssql`·`api`·`mcp`·`web`은 `full` 프로필에 속한다.
 따라서 모드 A에서는 Qdrant만 뜬다 — ADR-0002의 "MS-SQL은 네이티브"가 유지된다.
+
+모드 B의 API와 독립 MCP 컨테이너는 `embedding-models` 볼륨을 `/app/models`에 함께 마운트한다.
+KURE-v1을 한 컨테이너가 처음 내려받은 뒤 다른 컨테이너와 재기동에서도 같은 모델 캐시를 쓴다.
 
 모드 B에서는 `migrate`가 MS-SQL 헬스 통과 뒤 스키마를 적용하고 성공 종료한 다음 `api`와
 `mcp`가 시작한다. `web`은 API 헬스 통과 뒤 시작한다. API 컨테이너는 stdio MCP 모듈을 자식

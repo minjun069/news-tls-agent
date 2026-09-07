@@ -95,6 +95,8 @@ def _point(
 
 def test_real_collection_upsert_and_payload_contract(context: QdrantContext) -> None:
     assert context.client.count(context.collection, exact=True).count == 3
+    assert context.store.all_point_ids(batch_size=2) == {91001, 91002, 91003}
+    assert context.store.dense_point_ids([91001, 91002, 99999]) == {91001, 91002}
 
     records = context.client.retrieve(
         context.collection,

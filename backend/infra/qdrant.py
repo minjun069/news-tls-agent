@@ -57,6 +57,47 @@ class QdrantVectorStore:
         )
         return len(points)
 
+    def dense_point_ids(self, article_ids: Sequence[int]) -> set[int]:
+        """재개 적재 시 이미 dense 벡터가 있는 기사 ID를 반환한다."""
+        if not article_ids:
+            return set()
+        records = self._client.retrieve(
+            collection_name=self._collection,
+            ids=list(article_ids),
+            with_payload=False,
+            with_vectors=[DENSE_VECTOR_NAME],
+        )
+        dense_ids: set[int] = set()
+        for record in records:
+            article_id = _integer_point_id(record.id)
+            vectors = record.vector
+            if isinstance(vectors, Mapping) and DENSE_VECTOR_NAME in vectors:
+                dense_ids.add(article_id)
+        return dense_ids
+
+    def all_point_ids(self, batch_size: int = 1_000) -> set[int]:
+        """적재 종료 검증을 위해 컬렉션의 전체 정수 포인트 ID를 순회한다."""
+        if batch_size < 1:
+            raise ValueError("batch_size는 1 이상이어야 합니다")
+        point_ids: set[int] = set()
+        offset: int | str | None = None
+        while True:
+            records, next_offset = self._client.scroll(
+                collection_name=self._collection,
+                limit=batch_size,
+                offset=offset,
+                with_payload=False,
+                with_vectors=False,
+            )
+            point_ids.update(_integer_point_id(record.id) for record in records)
+            if next_offset is None:
+                return point_ids
+            offset = next_offset
+
+    def close(self) -> None:
+        """스크립트가 소유한 Qdrant 연결 자원을 해제한다."""
+        self._client.close()
+
     def search_vector(
         self,
         vector: Sequence[float],
@@ -173,7 +214,11 @@ def _date_filter(options: SearchOptions) -> models.Filter | None:
 def _to_search_hits(points: Sequence[models.ScoredPoint]) -> list[SearchHit]:
     hits: list[SearchHit] = []
     for point in points:
-        if not isinstance(point.id, int) or isinstance(point.id, bool):
-            raise TypeError(f"Qdrant 포인트 ID가 기사 정수 ID가 아닙니다: {point.id!r}")
-        hits.append(SearchHit(article_id=point.id, score=point.score))
+        hits.append(SearchHit(article_id=_integer_point_id(point.id), score=point.score))
     return hits
+
+
+def _integer_point_id(point_id: object) -> int:
+    if not isinstance(point_id, int) or isinstance(point_id, bool):
+        raise TypeError(f"Qdrant 포인트 ID가 기사 정수 ID가 아닙니다: {point_id!r}")
+    return point_id

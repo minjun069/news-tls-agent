@@ -2,7 +2,16 @@ from __future__ import annotations
 
 import pytest
 
-from core.config import ConfigError, load_api_config, load_export_config, load_settings
+from core.config import (
+    ConfigError,
+    load_api_config,
+    load_embedding_config,
+    load_embedding_dimensions,
+    load_export_config,
+    load_gemini_config,
+    load_qdrant_config,
+    load_settings,
+)
 
 
 def required_env() -> dict[str, str]:
@@ -18,6 +27,9 @@ def test_s5_defaults_use_verified_models_and_loop_limits() -> None:
 
     assert settings.gemini.model == "gemini-3.6-flash"
     assert settings.gemini.embedding_model == "gemini-embedding-2"
+    assert settings.gemini.embedding_dimensions == 3072
+    assert settings.embedding.provider == "gemini"
+    assert settings.embedding.dimensions == 3072
     assert settings.timeline.max_rounds == 4
     assert settings.timeline.max_chain_depth == 2
     assert settings.timeline.max_clarifications == 2
@@ -35,6 +47,54 @@ def test_timeline_limits_must_be_positive_integers() -> None:
     env = required_env() | {"TIMELINE_MAX_ROUNDS": "four"}
     with pytest.raises(ConfigError, match="정수"):
         load_settings(env)
+
+
+def test_vector_only_settings_do_not_require_mssql_credentials() -> None:
+    gemini = load_gemini_config({"GOOGLE_API_KEY": "test-key"})
+    qdrant = load_qdrant_config({})
+
+    assert gemini.embedding_dimensions == 3072
+    assert qdrant.collection == "articles"
+
+
+def test_embedding_dimensions_must_be_positive() -> None:
+    with pytest.raises(ConfigError, match="1 이상"):
+        load_gemini_config({"GOOGLE_API_KEY": "test-key", "GEMINI_EMBEDDING_DIMENSIONS": "0"})
+
+    assert load_embedding_dimensions({}) == 3072
+
+
+def test_local_embedding_defaults_match_benchmarked_contract() -> None:
+    config = load_embedding_config({"EMBEDDING_PROVIDER": "local"})
+
+    assert config.model == "nlpai-lab/KURE-v1"
+    assert config.dimensions == 1024
+    assert config.normalize is True
+    assert config.max_seq_length == 256
+    assert config.batch_size == 4
+    assert config.device == "cpu"
+    assert config.threads == 10
+    assert config.query_prompt == ""
+    assert load_embedding_dimensions({"EMBEDDING_PROVIDER": "local"}) == 1024
+
+
+@pytest.mark.parametrize(
+    ("env", "message"),
+    [
+        ({"EMBEDDING_PROVIDER": "unknown"}, "gemini 또는 local"),
+        (
+            {"EMBEDDING_PROVIDER": "local", "LOCAL_EMBEDDING_NORMALIZE": "sometimes"},
+            "true 또는 false",
+        ),
+        (
+            {"EMBEDDING_PROVIDER": "local", "LOCAL_EMBEDDING_MAX_SEQ_LENGTH": "0"},
+            "1 이상",
+        ),
+    ],
+)
+def test_local_embedding_settings_reject_invalid_values(env: dict[str, str], message: str) -> None:
+    with pytest.raises(ConfigError, match=message):
+        load_embedding_config(env)
 
 
 def test_api_origins_are_split_trimmed_and_deduplicated() -> None:

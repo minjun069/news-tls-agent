@@ -17,6 +17,7 @@
 | `make doc-ack REASON='근거'` | 계약 문서를 검토했으나 계약 변경이 없다는 파일 해시·근거 기록 | 계약 코드만 변경된 경우 |
 | `make check` | lint + arch + unit + docs | 모든 커밋 전 |
 | `make agent-budget` | AGENTS.md의 현재 줄·바이트·추정 토큰 | 상위 지침 변경 후; 현재 실패 기준 없음 |
+| `make benchmark-embeddings MODEL='모델 ID'` | 실제 뉴스 고정 표본의 CPU 처리량·메모리·검색 결과 | 로컬 임베딩 모델·전처리 변경 전 |
 | `make compose-check` | 전체 프로필 Compose 해석·필수 변수·서비스 의존 문법 | 컨테이너 구성 변경 후 |
 | `make images` | `api`·`mcp`·`web` 이미지 실제 빌드 | Dockerfile·Compose 변경 후 |
 | `make up` | 기본 개발 인프라(Qdrant) | 로컬 개발 |
@@ -37,7 +38,10 @@ Qdrant 1.19 서비스 컨테이너를 기동하고 마이그레이션 뒤 `make 
 
 `make up`은 `docker-compose.yml`에 고정된 Qdrant `v1.19.0`을 기동한다. S3-P3 단위 테스트는
 주입한 모의 SDK client로 컬렉션·적재·검색 요청 계약을 검사하고, 실제 컨테이너와 임베딩 API는
-S2 시드가 준비된 S3-A2·A3에서 `make test-all`과 실제 요청으로 검증한다.
+S3-A2·A3에서 `make test-all`과 실제 요청으로 검증한다. 현재 `articles_kure_v1`은 실제 원본
+178,887건과 ID가 일치하며 누락·초과·sparse-only가 0건이다. 멱등 재실행은 dense 178,887건을
+모두 건너뛰고 임베딩·upsert 0건으로 끝났다. 실제 MCP의 세 검색 방식은 서로 다른 상위 목록을
+반환했고, 2024년 기간으로 제한한 질의는 세 방식 모두 0건을 반환했다.
 
 `make test-integration`의 Qdrant 검사는 실행마다 임시 컬렉션을 만들어 dense Cosine, BM25 IDF,
 payload 4종, OR·AND 결합, 기간 선필터를 실제 서버에서 확인하고 종료 시 컬렉션을 삭제한다.

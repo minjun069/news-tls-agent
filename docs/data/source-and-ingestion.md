@@ -19,7 +19,7 @@
 | 본문 | 검색·임베딩·근거 확인·엔티티 추출 | 원본 아카이브 | 원본 값. 없으면 적재 제외 |
 | 원문 URL | 사용자 검증 경로 | 원본 아카이브 | 원본 값. 없으면 빈 값 |
 | 카테고리 3단 | 검색 필터 | 원본 아카이브 | 원본 값 |
-| 임베딩 벡터 | 의미 검색 | 임베딩 API 생성 | 실패 시 재시도. 최종 실패 시 벡터 없음 |
+| 임베딩 벡터 | 의미 검색 | 선택한 로컬 또는 Gemini 공급자 생성 | 실패 시 재시도. 최종 실패 시 벡터 없음 |
 | 엔티티·관계 | 지식 그래프 | LLM 추출 | 기사 본문에 서술된 것만 |
 
 ### 1.2 적재 제외 기준
@@ -38,7 +38,7 @@
 | 원본 JSONL | `data/raw/` | Git 추적 제외. 사용자가 직접 투입 |
 | 중간 정규화 파일 | 만들지 않음 | 원본은 검증 뒤 MS-SQL에 직접 배치 적재 |
 | 기사·이슈·엔티티·관계 | MS-SQL `newsagent` | |
-| 임베딩 벡터 | Qdrant `articles` 컬렉션 | 컨테이너 볼륨 |
+| 임베딩 벡터 | Qdrant `articles_kure_v1` 컬렉션 | 기존 Gemini `articles`는 보존 |
 | 감사 로그 · 실행 로그 | 로그 파일 | 회전 정책 미적용 |
 
 ### 1.4 보존 및 삭제
@@ -48,7 +48,7 @@
 | 기사 | 삭제하지 않음. 재적재는 멱등(동일 ID 덮어쓰기) |
 | 이슈 | 사용자 삭제 기능 없음. 재생성 시 기존 이슈 재사용 |
 | 엔티티·관계 | 기사 삭제 시 CASCADE. 개별 삭제 기능 없음 |
-| 임베딩 | 컬렉션 재생성으로 전체 교체 |
+| 임베딩 | 차원·모델 변경 시 새 컬렉션을 완성한 뒤 설정 전환. 기존 컬렉션은 삭제하지 않음 |
 | 로그 | 보존 기간 정하지 않음 |
 
 ### 1.5 개인정보 처리
@@ -144,7 +144,7 @@ scripts/02_load_mssql.py               ← 같은 원본을 재순회해 검증�
       │
       ├──▶ MS-SQL (articles)
       │
-      └──▶ scripts/03_build_vectors.py ─▶ Qdrant (articles 컬렉션)
+      └──▶ scripts/03_build_vectors.py ─▶ Qdrant (공급자별 articles 컬렉션)
 ```
 
 엔티티·관계는 이 파이프라인에 포함되지 않는다. **런타임에 그래프를 조회할 때 추출**한다 (§2.6).
@@ -202,14 +202,34 @@ ID 중복이 모두 0건임을 확인했다. 같은 날 MS-SQL `articles`에는 
 
 ### 3.3 벡터 적재
 
+- 입력은 `data/raw/*.jsonl`이며 MS-SQL 적재와 같은 `raw_ingestion.py` 정규화 규칙을 공유한다.
 - dense·BM25 입력 텍스트: `제목 + 요약 + 본문`
 - 청킹하지 않음 (기사 1건 = Qdrant 포인트 1개)
 - named vector: `dense`(Cosine), `bm25`(sparse, IDF modifier)
 - BM25: multilingual tokenizer, stemmer 없음, stopwords 없음
 - payload: `article_id`, `service_date`, `title`, `category_middle`
 - 원문·결합 텍스트는 payload에 저장하지 않음
+- 권장 dense 공급자는 로컬 `nlpai-lab/KURE-v1`: 1,024차원, L2 정규화, 256토큰, 문서·질의
+  접두어 없음, CPU 10스레드, 내부 배치 4
+- `EMBEDDING_PROVIDER=gemini`이면 기존 `gemini-embedding-2` 3,072차원과 문서·질의 접두어를
+  사용한다. 서로 다른 차원은 같은 컬렉션에 섞지 않는다.
 - dense 임베딩 실패 시 BM25 sparse point는 저장하고 dense만 재적재 대상으로 남김
 - Qdrant 저장 실패 시 지수 백오프 재시도 (EX-04)
+- 기본 32건 배치, 최대 7회 재시도이며 대기 시간은 1초부터 최대 60초까지 두 배로 늘어난다.
+- 기본 재실행은 이미 dense 벡터가 있는 기사 ID를 건너뛴다. 원본이 바뀌어 같은 ID도 다시
+  임베딩해야 할 때만 `--force`를 사용한다.
+- 종료 시 원본 고유 ID 집합과 Qdrant 전체 ID 집합을 대조한다. dense 실패, 누락 ID, 원본에 없는
+  Qdrant ID 중 하나라도 있으면 JSON 결과를 `partial`로 출력하고 종료 코드 2를 반환한다.
+- Gemini가 일일 임베딩 한도 소진을 응답하면 다음 기사를 BM25 전용 포인트로 바꾸지 않고 즉시
+  종료 코드 3을 반환한다. 한도가 초기화되거나 사용 등급이 바뀐 뒤 같은 명령을 실행하면 이미
+  저장된 dense 기사 ID를 건너뛰고 나머지부터 재개한다.
+- `--sparse-only`는 기사 내용을 외부 임베딩 API로 보내지 않고 로컬 BM25만 먼저 적재할 때 쓴다.
+  이 실행은 의미 검색 준비가 끝나지 않았으므로 정상적으로 `partial`이다.
+
+현재 `articles_kure_v1`에는 실제 원본의 KURE dense·BM25 포인트 178,887건이 있다. 전체 실행은
+원본 178,887건, 컬렉션 178,887건, 누락·초과·sparse-only 0건으로 끝났다. 같은 입력 재실행은
+dense 178,887건을 모두 건너뛰고 임베딩·upsert 0건으로 완료돼 재개·멱등 계약을 확인했다.
+기존 `articles`의 BM25 178,887건과 Gemini dense 900건은 복구 경로로 보존한다.
 
 ### 3.4 실행 순서
 
@@ -219,10 +239,13 @@ ID 중복이 모두 0건임을 확인했다. 같은 날 MS-SQL `articles`에는 
 cd backend
 uv run python -m scripts.01_validate_raw ../data/raw/news.jsonl
 uv run python -m scripts.02_load_mssql ../data/raw/news.jsonl --batch-size 200
+uv run python -m scripts.03_build_vectors ../data/raw/news.jsonl --batch-size 32
 ```
 
 MS-SQL 적재가 벡터 적재보다 **먼저** 수행되어야 한다. 벡터 검색이 반환한 `article_id`로 원문을
-조회하므로, 원문이 없으면 검색 결과를 표시할 수 없다.
+조회하므로, 원문이 없으면 검색 결과를 표시할 수 없다. 기본 로컬 공급자는 기사 제목·요약·본문을
+외부로 전송하지 않는다. Gemini 공급자를 명시한 경우에만 이 내용을 Google API에 보내므로
+데이터 외부 전송 권한과 API 한도를 확인한다.
 
 ---
 

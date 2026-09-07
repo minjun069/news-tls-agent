@@ -37,6 +37,20 @@ class GeminiConfig:
     api_key: str
     model: str
     embedding_model: str
+    embedding_dimensions: int
+
+
+@dataclass(frozen=True)
+class EmbeddingConfig:
+    provider: str
+    model: str
+    dimensions: int
+    normalize: bool
+    max_seq_length: int
+    batch_size: int
+    device: str
+    threads: int
+    query_prompt: str
 
 
 @dataclass(frozen=True)
@@ -65,6 +79,7 @@ class Settings:
     mssql: MssqlConfig
     qdrant: QdrantConfig
     gemini: GeminiConfig
+    embedding: EmbeddingConfig
     timeline: TimelineConfig
     api: ApiConfig
     export: ExportConfig
@@ -92,6 +107,15 @@ def _positive_int(env: Mapping[str, str], key: str, default: int) -> int:
     return value
 
 
+def _boolean(env: Mapping[str, str], key: str, default: bool) -> bool:
+    raw_value = _optional(env, key, "true" if default else "false").lower()
+    if raw_value in {"true", "yes", "1"}:
+        return True
+    if raw_value in {"false", "no", "0"}:
+        return False
+    raise ConfigError(f"{key}는 true 또는 false여야 합니다")
+
+
 def load_mssql_config(env: Mapping[str, str]) -> MssqlConfig:
     """DB 도구가 LLM 설정 없이 MS-SQL 설정만 읽을 수 있게 한다."""
     return MssqlConfig(
@@ -108,19 +132,66 @@ def load_mssql_config(env: Mapping[str, str]) -> MssqlConfig:
     )
 
 
+def load_qdrant_config(env: Mapping[str, str]) -> QdrantConfig:
+    """Qdrant만 사용하는 적재 스크립트가 전체 앱 설정 없이 접속 정보를 읽는다."""
+    return QdrantConfig(
+        url=_optional(env, "QDRANT_URL", "http://localhost:6333"),
+        collection=_optional(env, "QDRANT_COLLECTION", "articles"),
+    )
+
+
+def load_embedding_dimensions(env: Mapping[str, str]) -> int:
+    """선택한 공급자와 Qdrant 컬렉션이 공유하는 dense 벡터 차원을 읽는다."""
+    return load_embedding_config(env).dimensions
+
+
+def load_embedding_config(env: Mapping[str, str]) -> EmbeddingConfig:
+    """Gemini 또는 로컬 임베딩 공급자의 실행 계약을 읽는다."""
+    provider = _optional(env, "EMBEDDING_PROVIDER", "gemini").lower()
+    if provider == "gemini":
+        return EmbeddingConfig(
+            provider=provider,
+            model=_optional(env, "GEMINI_EMBEDDING_MODEL", "gemini-embedding-2"),
+            dimensions=_positive_int(env, "GEMINI_EMBEDDING_DIMENSIONS", 3072),
+            normalize=False,
+            max_seq_length=8192,
+            batch_size=32,
+            device="remote",
+            threads=1,
+            query_prompt="task: search result | query: ",
+        )
+    if provider != "local":
+        raise ConfigError("EMBEDDING_PROVIDER는 gemini 또는 local이어야 합니다")
+    return EmbeddingConfig(
+        provider=provider,
+        model=_optional(env, "LOCAL_EMBEDDING_MODEL", "nlpai-lab/KURE-v1"),
+        dimensions=_positive_int(env, "LOCAL_EMBEDDING_DIMENSIONS", 1024),
+        normalize=_boolean(env, "LOCAL_EMBEDDING_NORMALIZE", True),
+        max_seq_length=_positive_int(env, "LOCAL_EMBEDDING_MAX_SEQ_LENGTH", 256),
+        batch_size=_positive_int(env, "LOCAL_EMBEDDING_BATCH_SIZE", 4),
+        device=_optional(env, "LOCAL_EMBEDDING_DEVICE", "cpu"),
+        threads=_positive_int(env, "LOCAL_EMBEDDING_THREADS", 10),
+        query_prompt=_optional(env, "LOCAL_EMBEDDING_QUERY_PROMPT"),
+    )
+
+
+def load_gemini_config(env: Mapping[str, str]) -> GeminiConfig:
+    """Gemini 생성·임베딩 어댑터의 공용 설정을 읽는다."""
+    return GeminiConfig(
+        api_key=_required(env, "GOOGLE_API_KEY"),
+        model=_optional(env, "GEMINI_MODEL", "gemini-3.6-flash"),
+        embedding_model=_optional(env, "GEMINI_EMBEDDING_MODEL", "gemini-embedding-2"),
+        embedding_dimensions=_positive_int(env, "GEMINI_EMBEDDING_DIMENSIONS", 3072),
+    )
+
+
 def load_settings(env: Mapping[str, str]) -> Settings:
     """환경 매핑에서 전체 애플리케이션 설정을 읽는다."""
     return Settings(
         mssql=load_mssql_config(env),
-        qdrant=QdrantConfig(
-            url=_optional(env, "QDRANT_URL", "http://localhost:6333"),
-            collection=_optional(env, "QDRANT_COLLECTION", "articles"),
-        ),
-        gemini=GeminiConfig(
-            api_key=_required(env, "GOOGLE_API_KEY"),
-            model=_optional(env, "GEMINI_MODEL", "gemini-3.6-flash"),
-            embedding_model=_optional(env, "GEMINI_EMBEDDING_MODEL", "gemini-embedding-2"),
-        ),
+        qdrant=load_qdrant_config(env),
+        gemini=load_gemini_config(env),
+        embedding=load_embedding_config(env),
         timeline=TimelineConfig(
             max_rounds=_positive_int(env, "TIMELINE_MAX_ROUNDS", 4),
             max_chain_depth=_positive_int(env, "TIMELINE_MAX_CHAIN_DEPTH", 2),

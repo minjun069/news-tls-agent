@@ -17,8 +17,9 @@ from app.graph import GraphProgressSink, KnowledgeGraphService
 from app.pipeline import ProgressSink, TimelinePipeline
 from app.search import ArticleSearchService
 from core.config import Settings, load_settings
+from core.ports import EmbeddingProvider
 from infra.db import create_db_engine, create_session_factory
-from infra.embedding import GeminiEmbeddingProvider
+from infra.embedding import create_embedding_provider
 from infra.gemini import GeminiStructuredGenerator
 from infra.mcp_client import MCPToolClient
 from infra.qdrant import QdrantVectorStore
@@ -46,8 +47,9 @@ def _vector_store() -> QdrantVectorStore:
 
 
 @lru_cache
-def _embedding_provider() -> GeminiEmbeddingProvider:
-    return GeminiEmbeddingProvider(get_settings().gemini)
+def _embedding_provider() -> EmbeddingProvider:
+    settings = get_settings()
+    return create_embedding_provider(settings.embedding, settings.gemini)
 
 
 @lru_cache

@@ -15,7 +15,7 @@ from app.exporting import BriefingExportService
 from app.search import ArticleSearchService
 from core.config import load_settings
 from infra.db import create_db_engine, create_session_factory
-from infra.embedding import GeminiEmbeddingProvider
+from infra.embedding import create_embedding_provider
 from infra.notion import NotionBriefingPublisher
 from infra.pdf import FpdfBriefingRenderer
 from infra.qdrant import QdrantVectorStore
@@ -50,7 +50,7 @@ def build_dependencies(env: Mapping[str, str]) -> ToolDependencies:
     engine = create_db_engine(settings.mssql)
     repository = SqlRepository(create_session_factory(engine))
     vector_store = QdrantVectorStore(settings.qdrant)
-    embedding_provider = GeminiEmbeddingProvider(settings.gemini)
+    embedding_provider = create_embedding_provider(settings.embedding, settings.gemini)
     searcher = ArticleSearchService(
         keyword_searcher=vector_store,
         vector_store=vector_store,
