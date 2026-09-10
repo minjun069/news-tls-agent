@@ -166,7 +166,10 @@ def test_pipeline_filters_hallucinated_ids_and_never_passes_hypotheses_to_p8() -
             IntentInterpretation: [intent()],
             HypotheticalTimeline: [hypothetical()],
             SearchQueryDraft: [draft()],
-            ArticleSelection: [ArticleSelection(selected=(selected(), selected(999)))],
+            ArticleSelection: [
+                ArticleSelection(selected=(selected(), selected(999))),
+                ArticleSelection(selected=(selected(),)),
+            ],
             RelatedEvents: [
                 RelatedEvents(
                     events=(
@@ -306,6 +309,132 @@ def test_pipeline_recovers_with_original_topic_hybrid_fallback() -> None:
     assert fallback.semantic_text == "영남권 산불"
     assert fallback.options.date_from is None
     assert fallback.options.date_to is None
+
+
+def test_pipeline_retries_incomplete_selection_with_missing_candidate_ids() -> None:
+    repository = FakeRepository([article(1), article(2)])
+    searcher = FakeSearcher(
+        [
+            SearchResult(
+                method=SearchMethod.KEYWORD,
+                hits=(SearchHit(article_id=1, score=4), SearchHit(article_id=2, score=3)),
+            )
+        ]
+    )
+    generator = ScriptedGenerator(
+        {
+            IntentInterpretation: [intent()],
+            HypotheticalTimeline: [hypothetical()],
+            SearchQueryDraft: [draft()],
+            ArticleSelection: [
+                ArticleSelection(selected=(selected(1),)),
+                ArticleSelection(
+                    selected=(selected(1),),
+                    rejected=({"article_id": 2, "reason": "다른 사건"},),
+                ),
+            ],
+            RelatedEvents: [RelatedEvents()],
+            SufficiencyReview: [SufficiencyReview(is_sufficient=True)],
+            MergedTimeline: [merged(1)],
+        }
+    )
+    pipeline = TimelinePipeline(repository, searcher, generator, config(), sleeper=lambda _: None)
+
+    result = pipeline.generate("선정 완전성")
+
+    assert result.status is GenerationStatus.COMPLETED
+    assert len(generator.prompts[ArticleSelection]) == 2
+    assert "미분류 ARTICLE_ID: (2,)" in generator.prompts[ArticleSelection][1]
+    assert '"article_id":1' in generator.prompts[ArticleSelection][1]
+
+
+def test_pipeline_moves_to_next_search_after_selection_retry_rejects_all() -> None:
+    repository = FakeRepository([article(1), article(2)])
+    searcher = FakeSearcher(
+        [
+            SearchResult(
+                method=SearchMethod.KEYWORD,
+                hits=(SearchHit(article_id=1, score=4),),
+            ),
+            SearchResult(
+                method=SearchMethod.KEYWORD,
+                hits=(SearchHit(article_id=2, score=4),),
+            ),
+        ]
+    )
+    rejected_one = ArticleSelection(rejected=({"article_id": 1, "reason": "다른 지역 사건"},))
+    generator = ScriptedGenerator(
+        {
+            IntentInterpretation: [intent()],
+            HypotheticalTimeline: [hypothetical()],
+            SearchQueryDraft: [draft(), draft()],
+            ArticleSelection: [
+                rejected_one,
+                rejected_one,
+                ArticleSelection(selected=(selected(2),)),
+            ],
+            RelatedEvents: [RelatedEvents()],
+            SufficiencyReview: [SufficiencyReview(is_sufficient=True)],
+            MergedTimeline: [merged(2)],
+        }
+    )
+    pipeline = TimelinePipeline(repository, searcher, generator, config(), sleeper=lambda _: None)
+
+    result = pipeline.generate("P4 전건 탈락")
+
+    assert result.status is GenerationStatus.COMPLETED
+    assert result.rounds == 2
+    assert len(searcher.requests) == 2
+    assert len(generator.prompts[ArticleSelection]) == 3
+    assert "다른 지역 사건" in generator.prompts[ArticleSelection][1]
+    assert len(generator.prompts[SufficiencyReview]) == 1
+
+
+def test_pipeline_does_not_converge_when_each_round_selects_a_different_id() -> None:
+    repository = FakeRepository([article(1), article(2)])
+    searcher = FakeSearcher(
+        [
+            SearchResult(
+                method=SearchMethod.KEYWORD,
+                hits=(SearchHit(article_id=1, score=4),),
+            ),
+            SearchResult(
+                method=SearchMethod.KEYWORD,
+                hits=(SearchHit(article_id=2, score=4),),
+            ),
+        ]
+    )
+    generator = ScriptedGenerator(
+        {
+            IntentInterpretation: [intent()],
+            HypotheticalTimeline: [hypothetical()],
+            SearchQueryDraft: [draft(), draft()],
+            ArticleSelection: [
+                ArticleSelection(selected=(selected(1),)),
+                ArticleSelection(selected=(selected(2),)),
+            ],
+            RelatedEvents: [RelatedEvents(), RelatedEvents()],
+            SufficiencyReview: [
+                SufficiencyReview(is_sufficient=False, gaps=("추가 검색",)),
+                SufficiencyReview(is_sufficient=False, gaps=("추가 검색",)),
+            ],
+            AdditionalHypotheses: [AdditionalHypotheses()],
+            MergedTimeline: [merged(1, 2)],
+        }
+    )
+    pipeline = TimelinePipeline(
+        repository,
+        searcher,
+        generator,
+        config(max_rounds=2),
+        sleeper=lambda _: None,
+    )
+
+    result = pipeline.generate("라운드별 다른 기사")
+
+    assert result.status is GenerationStatus.COMPLETED
+    assert result.termination is TerminationReason.ROUND_LIMIT
+    assert result.selected_article_count == 2
 
 
 @pytest.mark.parametrize(
@@ -484,7 +613,7 @@ def test_pipeline_excludes_rejected_articles_and_bounds_search_period() -> None:
             ),
             SearchResult(
                 method=SearchMethod.KEYWORD,
-                hits=(SearchHit(article_id=1, score=5),),
+                hits=(SearchHit(article_id=2, score=5),),
             ),
         ]
     )
@@ -505,9 +634,9 @@ def test_pipeline_excludes_rejected_articles_and_bounds_search_period() -> None:
                     selected=(selected(2),),
                     rejected=({"article_id": 1, "reason": "다른 사건"},),
                 ),
-                ArticleSelection(),
+                ArticleSelection(selected=(selected(2),)),
             ],
-            RelatedEvents: [RelatedEvents()],
+            RelatedEvents: [RelatedEvents(), RelatedEvents()],
             SufficiencyReview: [
                 SufficiencyReview(is_sufficient=False, gaps=("공백",)),
                 SufficiencyReview(is_sufficient=False, gaps=("공백",)),
