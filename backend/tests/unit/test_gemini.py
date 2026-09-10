@@ -8,7 +8,8 @@ from google.genai import errors
 from pydantic import BaseModel
 
 from core.config import GeminiConfig
-from core.errors import LLMGenerationError, LLMRateLimitError
+from core.errors import LLMGenerationError, LLMOutputValidationError, LLMRateLimitError
+from core.models import ArticleGraphExtraction
 from infra.gemini import GeminiStructuredGenerator
 
 
@@ -61,6 +62,25 @@ def test_gemini_generator_revalidates_json_and_rejects_empty_response() -> None:
     empty_models = FakeModels(response=SimpleNamespace(parsed=None, text=None))
     with pytest.raises(LLMGenerationError, match="비어 있는"):
         generator(empty_models).generate("probe", Probe)
+
+
+def test_gemini_generator_preserves_response_type_raw_output_and_invalid_endpoints() -> None:
+    raw_output = {
+        "entities": [{"name": "기관", "entity_type": "기관"}],
+        "relations": [
+            {"source": "기관", "target": "없는 사건", "relation_type": "발표"},
+        ],
+    }
+    models = FakeModels(response=SimpleNamespace(parsed=raw_output, text=None))
+
+    with pytest.raises(LLMOutputValidationError) as caught:
+        generator(models).generate("probe", ArticleGraphExtraction)
+
+    error = caught.value
+    assert error.response_type == "ArticleGraphExtraction"
+    assert error.raw_output == raw_output
+    assert error.invalid_endpoints == (("기관", "없는 사건"),)
+    assert "없는 사건" in error.validation_error
 
 
 def test_gemini_generator_maps_rate_limit_separately() -> None:

@@ -15,6 +15,25 @@ class LLMRateLimitError(LLMGenerationError):
     """호출 한도 초과로 재시도 가능한 LLM 실패."""
 
 
+class LLMOutputValidationError(LLMGenerationError):
+    """구조화 출력의 응답 타입·원본·검증 실패 지점을 보존한다."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        response_type: str,
+        validation_error: str,
+        raw_output: object | None,
+        invalid_endpoints: tuple[tuple[str, str], ...] = (),
+    ) -> None:
+        super().__init__(message)
+        self.response_type = response_type
+        self.validation_error = validation_error
+        self.raw_output = raw_output
+        self.invalid_endpoints = invalid_endpoints
+
+
 class PipelineInvariantError(TimelineGenerationError):
     """인용 검증 뒤 저장 가능한 이벤트가 남지 않는 등 내부 불변식 위반."""
 
