@@ -8,11 +8,23 @@ class TimelineGenerationError(Exception):
 
 
 class LLMGenerationError(TimelineGenerationError):
-    """LLM API·빈 응답·구조 검증 실패."""
+    """세부 정책이 없는 LLM API·빈 응답 실패."""
+
+
+class LLMModelConfigurationError(LLMGenerationError):
+    """설정한 모델을 현재 API에서 호출할 수 없는 비재시도 실패."""
 
 
 class LLMRateLimitError(LLMGenerationError):
     """호출 한도 초과로 재시도 가능한 LLM 실패."""
+
+    def __init__(self, message: str, *, retry_after_seconds: float | None = None) -> None:
+        super().__init__(message)
+        self.retry_after_seconds = retry_after_seconds
+
+
+class LLMServiceUnavailableError(LLMGenerationError):
+    """503 재시도 예산을 소진한 일시적 모델 서비스 실패."""
 
 
 class LLMOutputValidationError(LLMGenerationError):

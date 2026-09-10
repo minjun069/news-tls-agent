@@ -8,7 +8,7 @@ import pytest
 
 from app.pipeline import TimelinePipeline
 from core.config import TimelineConfig
-from core.errors import LLMGenerationError
+from core.errors import LLMGenerationError, LLMServiceUnavailableError
 from core.models import (
     AdditionalHypotheses,
     Article,
@@ -601,6 +601,26 @@ def test_pipeline_retries_an_llm_failure_once() -> None:
     assert result.status is GenerationStatus.NO_ARTICLES
     assert len(generator.prompts[IntentInterpretation]) == 2
     assert delays == [1]
+
+
+def test_pipeline_does_not_repeat_adapter_managed_service_retries() -> None:
+    generator = ScriptedGenerator(
+        {IntentInterpretation: [LLMServiceUnavailableError("service unavailable")]}
+    )
+    delays: list[float] = []
+    pipeline = TimelinePipeline(
+        FakeRepository([]),
+        FakeSearcher([]),
+        generator,
+        config(),
+        sleeper=delays.append,
+    )
+
+    with pytest.raises(LLMServiceUnavailableError):
+        pipeline.generate("재시도 중복 방지")
+
+    assert len(generator.prompts[IntentInterpretation]) == 1
+    assert delays == []
 
 
 def test_pipeline_excludes_rejected_articles_and_bounds_search_period() -> None:
