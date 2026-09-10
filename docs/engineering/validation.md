@@ -19,6 +19,7 @@
 | `make agent-budget` | AGENTS.md의 현재 줄·바이트·추정 토큰 | 상위 지침 변경 후; 현재 실패 기준 없음 |
 | `make benchmark-embeddings MODEL='모델 ID'` | 실제 뉴스 고정 표본의 CPU 처리량·메모리·검색 결과 | 로컬 임베딩 모델·전처리 변경 전 |
 | `make ai-smoke` | 현재 `.env` Gemini 모델의 구조화 출력·함수 호출 실제 요청 | 모델 변경·배포 전, CI 기본 게이트 제외 |
+| `make search-regression` | 실제 MCP `search_articles`의 영남권 산불 2025년 hybrid 복원 결과 | 검색·MCP 변경 후, 실제 데이터 환경 |
 | `make compose-check` | 전체 프로필 Compose 해석·필수 변수·서비스 의존 문법 | 컨테이너 구성 변경 후 |
 | `make images` | `api`·`mcp`·`web` 이미지 실제 빌드 | Dockerfile·Compose 변경 후 |
 | `make up` | 기본 개발 인프라(Qdrant) | 로컬 개발 |
@@ -98,5 +99,12 @@ RH-07 실제 모델 점검은 `make ai-smoke`가 현재 `.env`의 `GEMINI_MODEL`
 2회 호출과 설정(2)·모델 ID(3)·구조화 출력(4)·함수 호출(5)의 종료 코드와 실패 단계 메시지를
 검사하며 `make check`에 포함된다. 실제 명령은 외부 API 키와 한도를 사용하므로 CI 기본 게이트에
 넣지 않고 모델 변경 또는 배포 직전에 별도로 실행한다.
+
+RH-08 결정론적 회귀는 `make check`에서 파이프라인의 기간·검색 복구·P4 전건 탈락·ID 기반
+수렴·가상 ID 차단, 그래프의 끝점 교정·관계 제외, Gemini 오류별 호출 횟수를 검사한다. 실제
+데이터 검사는 `make search-regression`으로 분리한다. 이 명령은 저장소나 Qdrant를 직접 읽지
+않고 stdio MCP 서버의 `search_articles`를 `query="영남권 산불"`, 2025-01-01~2025-12-31,
+`method="hybrid"`, `top_k=20`으로 호출한다. `ok: true`인 MS-SQL 복원 기사 1건 이상과 모든
+서비스 일자가 2025년임을 확인하면 0, MCP 연결 실패는 2, 무결과·계약 위반은 3으로 종료한다.
 
 검사를 실행하지 못했으면 통과로 표현하지 않고 이유와 남은 검증을 보고한다. 외부 서비스 상태는 해당 서비스의 실제 헬스·쿼리로 확인한다.

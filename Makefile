@@ -5,7 +5,7 @@ BE := backend
 WEB := web
 NPM ?= npm
 
-.PHONY: help install web-install check fmt lint arch test test-integration test-e2e test-all doc-sync doc-ack docs-for agent-budget benchmark-embeddings ai-smoke compose-check images up up-full down migrate mcp-inspect api web web-check
+.PHONY: help install web-install check fmt lint arch test test-integration test-e2e test-all doc-sync doc-ack docs-for agent-budget benchmark-embeddings ai-smoke search-regression compose-check images up up-full down migrate mcp-inspect api web web-check
 
 help:
 	@echo "install       backend .venv 생성 (uv)"
@@ -18,6 +18,7 @@ help:
 	@echo "agent-budget  AGENTS.md 현재 크기 보고(강제 기준 없음)"
 	@echo "benchmark-embeddings  MODEL='모델 ID' 실제 뉴스 CPU 임베딩 표본 측정"
 	@echo "ai-smoke      현재 Gemini 모델의 구조화 출력 · 함수 호출 실제 점검"
+	@echo "search-regression  실제 MCP로 영남권 산불 2025년 검색 회귀 점검"
 	@echo "test-all      MS-SQL · Qdrant 포함 통합 테스트"
 	@echo "test-integration  실제 MS-SQL · Qdrant 통합 테스트"
 	@echo "test-e2e      생성부터 그래프·내보내기까지 사용자 흐름"
@@ -79,6 +80,9 @@ benchmark-embeddings:
 
 ai-smoke:
 	cd $(BE) && uv run python -m scripts.ai_smoke
+
+search-regression:
+	cd $(BE) && uv run python -m scripts.search_regression
 
 compose-check:
 	docker compose --profile full config --quiet
