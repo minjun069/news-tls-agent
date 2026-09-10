@@ -396,10 +396,12 @@ event: error
 data: {"reason": "insufficient_events", "message": "그래프를 표시할 만큼 이벤트가 충분하지 않습니다.", "retryable": false}
 ```
 
-P9 호출이나 기사 단위 저장에 실패하면 `reason: "extraction_failed"`, `retryable: true`를
-반환한다. 외부 API 호출 한도 초과는 `reason: "rate_limited"`로 구분한다.
+P9 관계 끝점 검증 실패는 잘못된 끝점을 넣은 교정 생성을 한 번 요청한다. 재실패해도 유효하지
+않은 관계만 안전하게 식별할 수 있으면 그 관계를 제외하고 기사 단위 결과를 저장하므로 요청을
+계속한다. 그 밖의 P9 호출이나 기사 단위 저장 실패는 `reason: "extraction_failed"`,
+`retryable: true`를 반환한다. 외부 API 호출 한도 초과는 `reason: "rate_limited"`로 구분한다.
 서버 로그는 그래프 실행 ID와 실패 기사 ID, `ArticleGraphExtraction` 응답 타입 및 구조 검증
-오류를 남기며 기사 본문은 남기지 않는다.
+오류를 남긴다. 관계를 제외한 경우 잘못된 끝점도 감사 로그에 남기며 기사 본문은 남기지 않는다.
 
 ---
 

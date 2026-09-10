@@ -6,7 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.graph import KnowledgeGraphService
-from core.errors import InsufficientEventsError
+from core.errors import InsufficientEventsError, LLMOutputValidationError
 from core.models import (
     Article,
     ArticleGraph,
@@ -149,33 +149,125 @@ def test_graph_requires_two_events() -> None:
 
 
 def test_extraction_rejects_relations_without_article_entities() -> None:
-    with pytest.raises(ValidationError, match="entities에 있어야"):
+    with pytest.raises(ValidationError, match="'기관'->'사건'"):
         ArticleGraphExtraction(
             entities=(ExtractedEntity(name="기관", entity_type="기관"),),
             relations=(ExtractedRelation(source="기관", target="사건", relation_type="발표"),),
         )
 
 
-class InvalidGraphGenerator:
+def invalid_output_error(
+    raw_output: object,
+    *,
+    endpoints: tuple[tuple[str, str], ...] = (),
+) -> LLMOutputValidationError:
+    return LLMOutputValidationError(
+        "구조화 출력 검증 실패",
+        response_type="ArticleGraphExtraction",
+        validation_error="관계의 주체와 대상은 entities에 있어야 합니다",
+        raw_output=raw_output,
+        invalid_endpoints=endpoints,
+    )
+
+
+class CorrectedGraphGenerator:
     model_name = "test-model"
 
+    def __init__(self) -> None:
+        self.prompts: list[str] = []
+
     def generate(self, prompt: str, response_type):
+        self.prompts.append(prompt)
         assert response_type is ArticleGraphExtraction
+        if len(self.prompts) == 1:
+            raise invalid_output_error(
+                {
+                    "entities": [{"name": "기관", "entity_type": "기관"}],
+                    "relations": [
+                        {"source": "기관", "target": "없는 사건", "relation_type": "발표"}
+                    ],
+                },
+                endpoints=(("기관", "없는 사건"),),
+            )
         return ArticleGraphExtraction(
             entities=(ExtractedEntity(name="기관", entity_type="기관"),),
-            relations=(ExtractedRelation(source="기관", target="없는 사건", relation_type="발표"),),
         )
 
 
-def test_graph_logs_failed_article_and_validation_error(caplog) -> None:
+def test_graph_requests_one_correction_with_invalid_endpoints() -> None:
+    repository = FakeRepository(make_issue())
+    generator = CorrectedGraphGenerator()
     service = KnowledgeGraphService(
-        FakeRepository(make_issue()),
-        InvalidGraphGenerator(),
+        repository,
+        generator,
         run_id_factory=lambda: "graph-rh01",
     )
 
+    graphs = service.build(7)
+
+    assert len(generator.prompts) == 2
+    assert "잘못된 관계 끝점: '기관'->'없는 사건'" in generator.prompts[1]
+    assert [node.name for node in graphs[1].nodes] == ["기관"]
+
+
+class TwiceInvalidGraphGenerator:
+    model_name = "test-model"
+
+    def __init__(self, raw_output: object) -> None:
+        self.raw_output = raw_output
+        self.calls = 0
+
+    def generate(self, prompt: str, response_type):
+        self.calls += 1
+        raise invalid_output_error(
+            self.raw_output,
+            endpoints=(("기관", "없는 사건"),),
+        )
+
+
+def test_graph_discards_only_invalid_relations_after_correction_fails(caplog) -> None:
+    raw_output = {
+        "entities": [
+            {"name": "기관", "entity_type": "기관"},
+            {"name": "사건", "entity_type": "사건"},
+        ],
+        "relations": [
+            {"source": "기관", "target": "사건", "relation_type": "발표"},
+            {"source": "기관", "target": "없는 사건", "relation_type": "참조"},
+        ],
+    }
+    generator = TwiceInvalidGraphGenerator(raw_output)
+    service = KnowledgeGraphService(
+        FakeRepository(make_issue()),
+        generator,
+        run_id_factory=lambda: "graph-rh05",
+    )
+
     with caplog.at_level("INFO", logger="news_tls_agent.graph"):
-        with pytest.raises(ValidationError, match="entities에 있어야"):
+        graphs = service.build(7)
+
+    assert generator.calls == 2
+    assert [edge.type for edge in graphs[1].edges] == ["발표"]
+    audit = next(
+        record
+        for record in caplog.records
+        if getattr(record, "event_name", None) == "graph.extraction.invalid_relations_discarded"
+    )
+    assert audit.run_id == "graph-rh05"
+    assert audit.article_id == 2
+    assert audit.invalid_endpoints == (("기관", "없는 사건"),)
+    assert "기관 2가 사건 2" not in caplog.text
+
+
+def test_graph_logs_failed_article_when_output_cannot_be_recovered(caplog) -> None:
+    service = KnowledgeGraphService(
+        FakeRepository(make_issue()),
+        TwiceInvalidGraphGenerator({"entities": [{"bad": "shape"}], "relations": []}),
+        run_id_factory=lambda: "graph-rh05-failed",
+    )
+
+    with caplog.at_level("INFO", logger="news_tls_agent.graph"):
+        with pytest.raises(LLMOutputValidationError):
             service.build(7)
 
     failure = next(
@@ -183,9 +275,9 @@ def test_graph_logs_failed_article_and_validation_error(caplog) -> None:
         for record in caplog.records
         if getattr(record, "event_name", None) == "graph.extraction.failed"
     )
-    assert failure.run_id == "graph-rh01"
+    assert failure.run_id == "graph-rh05-failed"
     assert failure.article_id == 2
     assert failure.response_type == "ArticleGraphExtraction"
-    assert failure.error_type == "ValidationError"
+    assert failure.error_type == "LLMOutputValidationError"
     assert "entities에 있어야" in failure.validation_error
     assert "기관 2가 사건 2" not in caplog.text

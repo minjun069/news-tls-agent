@@ -6,7 +6,14 @@ import logging
 from collections.abc import Callable
 from uuid import uuid4
 
-from core.errors import GraphExtractionError, InsufficientEventsError, IssueNotFoundError
+from pydantic import ValidationError
+
+from core.errors import (
+    GraphExtractionError,
+    InsufficientEventsError,
+    IssueNotFoundError,
+    LLMOutputValidationError,
+)
 from core.models import Article, ArticleGraph, ArticleGraphExtraction, GraphProgress, IssueEvent
 from core.ports import Repository, StructuredGenerator
 
@@ -73,27 +80,33 @@ class KnowledgeGraphService:
             if not article.content or not article.content.strip():
                 raise GraphExtractionError(f"기사 본문이 비어 있습니다: {article.article_id}")
             try:
-                extraction = self._generator.generate(
-                    _extraction_prompt(article),
-                    ArticleGraphExtraction,
-                )
+                extraction = self._extract(article, run_id)
             except Exception as exc:
-                root_error = _root_error(exc)
+                output_error = exc if isinstance(exc, LLMOutputValidationError) else None
+                root_error = output_error or _root_error(exc)
+                validation_error = (
+                    output_error.validation_error if output_error is not None else str(root_error)
+                )
+                invalid_endpoints = (
+                    output_error.invalid_endpoints if output_error is not None else ()
+                )
                 logger.exception(
                     "graph extraction failed: run_id=%s article_id=%s response_type=%s "
-                    "error_type=%s validation_error=%s",
+                    "error_type=%s validation_error=%s invalid_endpoints=%s",
                     run_id,
                     article.article_id,
                     ArticleGraphExtraction.__name__,
                     type(root_error).__name__,
-                    str(root_error),
+                    validation_error,
+                    invalid_endpoints,
                     extra={
                         "event_name": "graph.extraction.failed",
                         "run_id": run_id,
                         "article_id": article.article_id,
                         "response_type": ArticleGraphExtraction.__name__,
                         "error_type": type(root_error).__name__,
-                        "validation_error": str(root_error),
+                        "validation_error": validation_error,
+                        "invalid_endpoints": invalid_endpoints,
                     },
                 )
                 raise
@@ -126,6 +139,57 @@ class KnowledgeGraphService:
             graphs.append(graph)
         return tuple(graphs)
 
+    def _extract(self, article: Article, run_id: str) -> ArticleGraphExtraction:
+        try:
+            return self._generator.generate(_extraction_prompt(article), ArticleGraphExtraction)
+        except LLMOutputValidationError as first_error:
+            logger.warning(
+                "graph correction requested: run_id=%s article_id=%s response_type=%s "
+                "invalid_endpoints=%s",
+                run_id,
+                article.article_id,
+                first_error.response_type,
+                first_error.invalid_endpoints,
+                extra={
+                    "event_name": "graph.extraction.correction_requested",
+                    "run_id": run_id,
+                    "article_id": article.article_id,
+                    "response_type": first_error.response_type,
+                    "invalid_endpoints": first_error.invalid_endpoints,
+                },
+            )
+            try:
+                return self._generator.generate(
+                    _correction_prompt(article, first_error),
+                    ArticleGraphExtraction,
+                )
+            except LLMOutputValidationError as retry_error:
+                try:
+                    extraction, discarded = ArticleGraphExtraction.discard_invalid_relations(
+                        retry_error.raw_output
+                    )
+                except (TypeError, ValueError, ValidationError):
+                    raise retry_error from None
+                discarded_endpoints = tuple(
+                    (relation.source, relation.target) for relation in discarded
+                )
+                logger.warning(
+                    "graph invalid relations discarded: run_id=%s article_id=%s "
+                    "response_type=%s invalid_endpoints=%s",
+                    run_id,
+                    article.article_id,
+                    retry_error.response_type,
+                    discarded_endpoints,
+                    extra={
+                        "event_name": "graph.extraction.invalid_relations_discarded",
+                        "run_id": run_id,
+                        "article_id": article.article_id,
+                        "response_type": retry_error.response_type,
+                        "invalid_endpoints": discarded_endpoints,
+                    },
+                )
+                return extraction
+
     def _report(self, remaining: int) -> None:
         if self._progress_sink is not None:
             self._progress_sink(GraphProgress(remaining=remaining))
@@ -157,4 +221,15 @@ ARTICLE_ID: {article.article_id}
 TITLE: {article.title}
 CONTENT:
 {article.content}
+"""
+
+
+def _correction_prompt(article: Article, error: LLMOutputValidationError) -> str:
+    endpoints = ", ".join(f"{source!r}->{target!r}" for source, target in error.invalid_endpoints)
+    return f"""{_extraction_prompt(article)}
+
+직전 {error.response_type} 출력은 구조 검증에 실패했습니다.
+검증 오류: {error.validation_error}
+잘못된 관계 끝점: {endpoints or "확인되지 않음"}
+entities에 같은 표기로 존재하는 source와 target만 사용해 전체 출력을 한 번 수정하세요.
 """

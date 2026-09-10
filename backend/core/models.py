@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import date, datetime
 from enum import StrEnum
 from typing import Literal, Self
@@ -255,10 +256,42 @@ class ArticleGraphExtraction(DomainModel):
         if len(names) != len(set(names)):
             raise ValueError("한 기사 안에서 엔티티 표기는 중복될 수 없습니다")
         available = set(names)
-        for relation in self.relations:
-            if relation.source not in available or relation.target not in available:
-                raise ValueError("관계의 주체와 대상은 entities에 있어야 합니다")
+        invalid = tuple(
+            relation
+            for relation in self.relations
+            if relation.source not in available or relation.target not in available
+        )
+        if invalid:
+            endpoints = ", ".join(
+                f"{relation.source!r}->{relation.target!r}" for relation in invalid
+            )
+            raise ValueError(f"관계의 주체와 대상은 entities에 있어야 합니다: {endpoints}")
         return self
+
+    @classmethod
+    def discard_invalid_relations(
+        cls,
+        payload: object,
+    ) -> tuple[Self, tuple[ExtractedRelation, ...]]:
+        """끝점만 잘못된 관계를 제외하고 나머지 구조를 다시 검증한다."""
+        if not isinstance(payload, Mapping):
+            raise TypeError("그래프 출력 원본이 객체가 아닙니다")
+        entities = tuple(
+            ExtractedEntity.model_validate(item) for item in payload.get("entities", ())
+        )
+        relations = tuple(
+            ExtractedRelation.model_validate(item) for item in payload.get("relations", ())
+        )
+        available = {entity.name for entity in entities}
+        discarded = tuple(
+            relation
+            for relation in relations
+            if relation.source not in available or relation.target not in available
+        )
+        if not discarded:
+            raise ValueError("제외할 잘못된 관계 끝점이 없습니다")
+        valid_relations = tuple(relation for relation in relations if relation not in discarded)
+        return cls(entities=entities, relations=valid_relations), discarded
 
 
 class GraphNode(DomainModel):
