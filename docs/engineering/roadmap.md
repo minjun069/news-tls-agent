@@ -194,7 +194,10 @@ make mcp-inspect
 
 `google-genai 1.75.0`과 `gemini-3.6-flash` 실제 API로 구조화 출력 Pydantic 파싱과 함수 호출을
 각각 확인했다. `gemini-2.5-flash`는 같은 계정에서 `404 NOT_FOUND`를 반환해 기본 모델과 문서
-계약을 함께 갱신했다.
+계약을 함께 갱신했다. 이후 2026-09-07 `gemini-2.5-flash-lite` 전환을 시도했지만 현재 프로젝트
+API 키에서 신규 사용자 제공 중단을 알리는 `404 NOT_FOUND`가 발생했다. API가 안내한 안정 버전
+`gemini-3.5-flash-lite`를 생성 기본 모델로 반영했으며, 이 모델은 구조화 출력과 함수 호출을
+지원한다. 변경 후 같은 키로 구조화 출력 Pydantic 파싱과 함수 호출 최소 요청을 각각 성공시켰다.
 
 ---
 
@@ -303,10 +306,13 @@ HTTP 메뉴도 MCP `export_briefing`을 호출하므로 대화 도구와 구현�
 > CI에서 MS-SQL을 서비스 컨테이너로 띄우는 것이 이 스프린트의 학습 지점이다. 로컬은 네이티브, CI는 컨테이너인 이중 구성을 다루게 된다.
 
 로컬 완료 검증에서는 별도 빈 Compose 볼륨으로 전체 서비스를 기동해 마이그레이션 종료 코드 0,
-API·웹·MS-SQL·Qdrant 헬스 통과, 실제 통합 테스트와 E2E, 세 이미지 빌드를 확인했다. PR 잡과
-`v*` 태그의 실제 GHCR 게시 결과는 해당 커밋을 원격에 push한 뒤 GitHub Actions에서 확인한다.
-S2 전체 원본 직접 적재는 완료됐지만 S3 `scripts/03_build_vectors.py`의 미완료 상태는 S9
-픽스처 E2E가 대신하지 않으며, 위 S3 체크리스트에 계속 남긴다.
+API·웹·MS-SQL·Qdrant 헬스 통과, 실제 통합 테스트와 E2E, 세 이미지 빌드를 확인했다. 원격
+`main`에서도 backend의 check·integration·e2e·images 잡과 web 잡이 통과했다. S3의 실제
+KURE dense·BM25 178,887건 적재와 원본 ID 대조도 완료됐다.
+
+`release-images` 워크플로 구현은 완료됐지만 아직 `v*` 태그가 없어 실제 GHCR 게시 실행은
+미검증이다. 첫 릴리스 태그를 `origin/main`에 붙여 API·MCP 이미지가 게시되고 다시 pull되는지
+확인하면 S9의 외부 게시 검증까지 끝난다.
 
 ---
 
@@ -326,4 +332,4 @@ S2 전체 원본 직접 적재는 완료됐지만 S3 `scripts/03_build_vectors.p
 |---|---|
 | 원본 데이터 투입 (`data/raw/`) | S2 이전 |
 | 선정된 시드 토픽·정답 사건 검토(선택) | S2 전처리 구현 전 |
-| Notion 통합 토큰 발급 | S8 이전 |
+| Notion 통합 토큰 발급·상위 페이지 연결 | Notion 내보내기 실제 사용 전 |

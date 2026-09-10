@@ -50,32 +50,81 @@ cp .env.example .env
 
 `.env` 설정 뒤 다음 한 줄이 MS-SQL, Qdrant, 마이그레이션, API, 독립 MCP 진입점, 웹을 모두
 준비한다. 마이그레이션 컨테이너가 성공 종료한 뒤 API/MCP가 시작되고, 웹은 API 헬스 통과 뒤
-시작한다.
+시작한다. Windows 네이티브 SQL Server가 호스트의 1433 포트를 사용 중이면 먼저 중지해야 한다.
+
+최소한 아래 값을 루트 `.env`에 설정한다. 컨테이너 내부의 MS-SQL 사용자·호스트와 Qdrant
+호스트는 Compose가 각각 `sa`·`mssql`·`qdrant`로 덮어쓴다.
+
+```dotenv
+GOOGLE_API_KEY=발급받은_Gemini_API_키
+MSSQL_PASSWORD=SQL_Server_정책을_통과하는_강한_암호
+EMBEDDING_PROVIDER=local
+QDRANT_COLLECTION=articles_kure_v1
+```
 
 ```bash
-docker compose --profile full up -d
+make up-full
+```
+
+Dockerfile이나 의존성을 바꾼 뒤에는 새 이미지를 만들며 기동한다.
+
+```bash
+docker compose --profile full up -d --build
 ```
 
 상태와 로그를 확인한다.
 
 ```bash
 docker compose --profile full ps
-docker compose --profile full logs migrate api mcp web
-curl http://localhost:8000/health
+docker compose --profile full logs --tail=100 migrate api mcp web
+curl --fail http://localhost:8000/health
 ```
+
+`mssql`, `qdrant`, `api`, `web`은 `running` 또는 `healthy`, `migrate`는 종료 코드 0이어야 한다.
+헬스 응답의 `mssql`, `qdrant`, `mcp_server`도 모두 `ok`여야 준비가 끝난 것이다.
 
 - 웹: `http://localhost:5173`
 - Swagger UI: `http://localhost:8000/docs`
 - Qdrant 대시보드: `http://localhost:6333/dashboard`
 
-중지는 `docker compose --profile full down`이다. 데이터 볼륨까지 지우는 `down -v`는 MS-SQL과
-Qdrant 데이터를 삭제하므로 이 README의 일반 종료 명령에 포함하지 않는다.
+전체 컨테이너 모드의 MS-SQL은 Windows 네이티브 MS-SQL과 다른 저장소다. 새 Docker 볼륨에는
+스키마만 있고 뉴스 기사는 자동 적재되지 않으므로, 실제 데이터가 필요하면 서비스를 기동한 뒤
+`.env`의 `MSSQL_HOST=localhost`, `MSSQL_USER=sa`, `QDRANT_URL=http://localhost:6333`을 사용해
+아래의 `scripts/01~03` 적재 절차를 실행한다.
+
+중지는 `docker compose --profile full down`이다. 데이터 볼륨까지 지우는 `down -v`는 MS-SQL,
+Qdrant, 모델 캐시를 삭제하므로 이 README의 일반 종료 명령에 포함하지 않는다.
 
 ## 개발 실행 — 모드 A
 
 모드 A에서는 앱을 WSL 로컬 프로세스로 실행하고 Qdrant만 컨테이너로 띄운다. MS-SQL은
 [ADR-0002](docs/decisions/0002-mssql-native-qdrant-container.md)에 따라 Windows 네이티브
-설치를 사용한다.
+설치를 사용한다. 현재 네이티브 MS-SQL과 Qdrant에 적재된 실제 뉴스 데이터를 그대로 쓰려면
+이 모드가 적합하다.
+
+먼저 `node`와 `npm`이 `/mnt/c/Program Files/nodejs`가 아니라 WSL 내부의 Linux 실행 파일인지
+확인한다. Node.js는 22.19 이상이어야 한다.
+
+```bash
+command -v node npm
+node --version
+npm --version
+```
+
+Windows에서 SQL Server 서비스를 시작하고 루트 `.env`를 모드 A 값으로 둔 다음 의존성과
+저장소를 준비한다.
+
+```dotenv
+GOOGLE_API_KEY=발급받은_Gemini_API_키
+MSSQL_HOST=
+MSSQL_USER=sa
+MSSQL_PASSWORD=Windows_SQL_Server의_sa_암호
+QDRANT_URL=http://localhost:6333
+QDRANT_COLLECTION=articles_kure_v1
+EMBEDDING_PROVIDER=local
+```
+
+`MSSQL_HOST`를 비우면 실행 시 WSL 기본 게이트웨이를 Windows 호스트 주소로 해석한다.
 
 ```bash
 make install
@@ -93,7 +142,8 @@ uv run python -m scripts.02_load_mssql ../data/raw/news.jsonl --batch-size 200
 uv run python -m scripts.03_build_vectors ../data/raw/news.jsonl --batch-size 32
 ```
 
-루트에서 API를 실행한다.
+첫 번째 터미널에서 API를 실행한다. API는 요청마다 stdio MCP 자식 프로세스를 실행하므로 별도
+MCP 데몬을 먼저 띄울 필요가 없다.
 
 ```bash
 make api
@@ -105,6 +155,10 @@ make api
 make web
 ```
 
+브라우저에서 `http://localhost:5173`을 열고, API 상태는
+`curl --fail http://localhost:8000/health`로 확인한다. 종료할 때는 API와 웹 터미널에서
+`Ctrl+C`를 누르고 `docker compose stop qdrant`로 Qdrant를 중지한다.
+
 WSL에서 `MSSQL_HOST`가 비어 있으면 기본 게이트웨이를 Windows 호스트 주소로 해석한다. 고정
 주소가 필요할 때만 `.env`에 직접 지정한다.
 
@@ -114,6 +168,58 @@ MCP 서버는 `.mcp.json`에 등록되어 있다. 다음 명령은 stdio 서버�
 ```bash
 make mcp-inspect
 ```
+
+## KURE-v1 캐시와 첫 검색
+
+모드 A에서는 Hugging Face 기본 호스트 캐시를 사용한다. 현재 개발 환경에는 아래 경로에 모델
+본체가 약 2.2GB로 캐시돼 있다.
+
+```text
+/home/ssafy/.cache/huggingface/hub/models--nlpai-lab--KURE-v1
+```
+
+첫 의미·하이브리드 검색 때 Hugging Face 메타데이터를 확인하는 `HEAD`/`GET` 요청이 보일 수 있고,
+2.2GB 가중치를 메모리에 올리는 CPU 초기화도 오래 걸릴 수 있다. 캐시 디렉터리와 대용량 모델
+blob이 존재한다면 이 현상을 모델 본체의 최초 다운로드로 보지 않는다.
+
+모드 B는 호스트 캐시를 마운트하지 않고 `embedding-models` Docker 볼륨을 `/app/models`로
+사용한다. 이 볼륨이 비어 있으면 컨테이너의 첫 검색에서 모델을 내려받고, 이후 API와 MCP
+컨테이너가 같은 캐시를 재사용한다.
+
+## Notion 연결
+
+1. Notion Creator dashboard에서 이 워크스페이스용 내부 연결을 만들고, Configuration 탭에서
+   Installation access token을 복사한다.
+2. 브리핑을 만들 상위 페이지를 열고 `•••` → `Connections` → `Add connection`에서 방금 만든
+   연결을 추가한다. 새 내부 연결은 기본적으로 어떤 페이지에도 접근할 수 없다.
+3. 루트 `.env`에 토큰과 선택적인 기본 상위 페이지 ID를 넣는다. `.env`는 Git에 커밋하지 않는다.
+
+```dotenv
+NOTION_TOKEN=발급받은_Installation_access_token
+NOTION_PARENT_PAGE_ID=상위_페이지_ID
+```
+
+페이지 ID는 페이지 URL의 마지막 32자리 식별자이며 하이픈 유무와 관계없이 사용할 수 있다.
+`NOTION_PARENT_PAGE_ID`를 비우면 이슈 화면의 “Notion 상위 페이지 ID” 입력란이나 API 요청의
+`parent_page_id`로 매번 전달해야 한다. 요청값이 있으면 환경변수 기본값보다 우선한다.
+
+설정을 바꾼 뒤 모드 A는 API를 재시작하고, 모드 B는 API와 MCP 컨테이너를 다시 만든다.
+
+```bash
+docker compose --profile full up -d --force-recreate api mcp
+```
+
+이슈 상세 화면의 내보내기 메뉴에서 확인하거나 API로 검사한다.
+
+```bash
+curl --fail --request POST http://localhost:8000/issues/<issue_id>/export \
+  --header 'Content-Type: application/json' \
+  --data '{"format":"notion"}'
+```
+
+기본 상위 페이지를 비워 뒀다면 JSON에 `"parent_page_id":"<page_id>"`를 함께 보낸다. 앱은
+Notion SDK 오류를 503 응답으로 감싸므로 실패 시 MCP 감사 로그를 확인한다. 내부 원인이 401이면
+토큰을, 403/404이면 해당 상위 페이지가 내부 연결에 공유됐는지를 먼저 확인한다.
 
 ## 데이터 적재 상태
 
@@ -166,6 +272,33 @@ make images            # api · mcp · web 이미지 빌드
 ghcr.io/minjun069/news-tls-agent-api:<tag>
 ghcr.io/minjun069/news-tls-agent-mcp-server:<tag>
 ```
+
+현재 릴리스 태그와 실제 게시 실행은 없다. 첫 검증에서는 사용할 버전(예: `v0.1.0`)이 원격에
+없는지 확인하고, 현재 검증된 `origin/main` 커밋을 직접 태그한다. 로컬 `main`을 강제로 맞추거나
+현재 작업 브랜치를 태그하지 않는다.
+
+```bash
+git fetch origin
+git show --no-patch --oneline origin/main
+git ls-remote --tags origin 'refs/tags/v0.1.0'
+git tag -a v0.1.0 origin/main -m 'news-tls-agent v0.1.0'
+git push origin v0.1.0
+```
+
+`git ls-remote`가 비어 있을 때만 그 버전을 사용한다. 태그 push 뒤 GitHub의 `release-images`
+워크플로에서 `api`와 `mcp` 행렬 빌드가 모두 성공했는지 확인한다. 성공하면 게시된 두 이미지를
+실제로 pull해 레지스트리 접근과 태그를 검증한다.
+
+```bash
+docker pull ghcr.io/minjun069/news-tls-agent-api:v0.1.0
+docker pull ghcr.io/minjun069/news-tls-agent-mcp-server:v0.1.0
+docker image inspect ghcr.io/minjun069/news-tls-agent-api:v0.1.0 --format '{{json .RepoDigests}}'
+docker image inspect ghcr.io/minjun069/news-tls-agent-mcp-server:v0.1.0 --format '{{json .RepoDigests}}'
+```
+
+pull 권한 오류가 나면 GitHub Packages에서 패키지 공개 범위를 확인하거나 `read:packages` 권한이
+있는 토큰으로 `docker login ghcr.io` 후 다시 확인한다. 이미 공개한 태그는 다른 커밋으로 옮기지
+않고 수정 릴리스에는 `v0.1.1`처럼 새 패치 버전을 사용한다.
 
 실제 서버 배포는 프로젝트 범위 밖이다. API/MCP 이미지 경계와 stdio 배치는
 [ADR-0007](docs/decisions/0007-stdio-mcp-container-packaging.md)을 따른다.

@@ -114,4 +114,19 @@ RH-09 오류 안내 회귀는 `backend/tests/unit/test_pipeline.py`가 실제 �
 버튼 없음 행동을 결정하며 `make web-check`로 타입과 프로덕션 빌드를 검증한다. 전체 사용자
 흐름은 `make test-e2e`로 다시 확인한다.
 
+모드 A의 KURE-v1은 호스트 Hugging Face 캐시를 사용한다. 현재 개발 환경의
+`/home/ssafy/.cache/huggingface/hub/models--nlpai-lab--KURE-v1`은 약 2.2GB이며 모델 본체가
+준비돼 있다. 시작 시 메타데이터 확인 요청과 CPU 가중치 로딩이 오래 걸릴 수 있지만, 이것만으로
+최초 다운로드라고 판정하지 않는다. 모드 B는 별도 `embedding-models` Docker 볼륨을 사용하므로
+그 볼륨의 캐시 상태를 따로 판단한다.
+
+GHCR 게시 검증은 `origin/main`의 확인된 커밋에 아직 사용하지 않은 `v*` 태그를 붙여 push한 뒤
+`release-images` 워크플로 성공과 아래 두 이미지의 pull을 확인한다. 이미 공개한 태그를 다른
+커밋으로 옮기지 않고, 재게시가 필요하면 새 패치 버전을 사용한다.
+
+```text
+ghcr.io/minjun069/news-tls-agent-api:<tag>
+ghcr.io/minjun069/news-tls-agent-mcp-server:<tag>
+```
+
 검사를 실행하지 못했으면 통과로 표현하지 않고 이유와 남은 검증을 보고한다. 외부 서비스 상태는 해당 서비스의 실제 헬스·쿼리로 확인한다.
