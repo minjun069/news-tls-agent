@@ -60,6 +60,7 @@ Codex의 PreToolUse 훅은 같은 라우팅을 패치 직전에 자동 실행해
 | L9 | 화면 변경 | `web-check` + 사람의 화면 기준 확인 | S7 |
 | L10 | 계약 코드 편집 시도 | Codex PreToolUse 문서 라우팅 알림 | S1 |
 | L11 | 스키마 변경 | 마이그레이션 재실행·카탈로그 확인 | S2 |
+| L12 | 생성 모델 변경·배포 | `make ai-smoke`로 구조화 출력·함수 호출 실제 확인 | 후속 안정화 RH-07 |
 
 L5와 L10은 짝이다. L10이 편집할 파일과 계약 문서의 연결을 알려주고, L5가 편집 후 검토 결과를 검사한다.
 
@@ -110,6 +111,7 @@ LLM 문장 자체의 골든 파일 대조는 사용하지 않는다. 비결정�
 | 계약 변경 없음 근거 | `.harness/doc-review.json` |
 | Markdown 링크 | `.harness/check_markdown_links.py` |
 | 상위 지침 크기 측정 | `.harness/report_agent_budget.py` |
+| 실제 생성 모델 기능 점검 | `backend/scripts/ai_smoke.py` · `make ai-smoke` |
 | 편집 직후 검사 | `.harness/on-edit.sh` + `.codex/hooks.json` |
 | 커밋 전 통합 게이트 | `Makefile` |
 | PR 게이트 | `.github/workflows/backend.yml` · `.github/workflows/web.yml` |

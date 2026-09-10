@@ -18,6 +18,7 @@
 | `make check` | lint + arch + unit + docs | 모든 커밋 전 |
 | `make agent-budget` | AGENTS.md의 현재 줄·바이트·추정 토큰 | 상위 지침 변경 후; 현재 실패 기준 없음 |
 | `make benchmark-embeddings MODEL='모델 ID'` | 실제 뉴스 고정 표본의 CPU 처리량·메모리·검색 결과 | 로컬 임베딩 모델·전처리 변경 전 |
+| `make ai-smoke` | 현재 `.env` Gemini 모델의 구조화 출력·함수 호출 실제 요청 | 모델 변경·배포 전, CI 기본 게이트 제외 |
 | `make compose-check` | 전체 프로필 Compose 해석·필수 변수·서비스 의존 문법 | 컨테이너 구성 변경 후 |
 | `make images` | `api`·`mcp`·`web` 이미지 실제 빌드 | Dockerfile·Compose 변경 후 |
 | `make up` | 기본 개발 인프라(Qdrant) | 로컬 개발 |
@@ -91,5 +92,11 @@ RH-06 모델 오류 정책 회귀는 `backend/tests/unit/test_gemini.py`에서 4
 검사한다. 구조 검증은 재호출 없이 별도 오류가 되는지, 파이프라인이 어댑터에서 이미 소진한
 재시도를 중복하지 않는지도 확인한다. `backend/tests/integration/test_api.py`는 생성·그래프 SSE가
 모델 설정, 한도, 일시 장애, 출력 검증 실패를 reason과 `retryable` 조합으로 구분하는지 검사한다.
+
+RH-07 실제 모델 점검은 `make ai-smoke`가 현재 `.env`의 `GEMINI_MODEL`로 구조화 출력과 강제
+함수 호출을 각각 한 번 수행한다. `backend/tests/unit/test_ai_smoke.py`는 외부 호출 대역으로 성공
+2회 호출과 설정(2)·모델 ID(3)·구조화 출력(4)·함수 호출(5)의 종료 코드와 실패 단계 메시지를
+검사하며 `make check`에 포함된다. 실제 명령은 외부 API 키와 한도를 사용하므로 CI 기본 게이트에
+넣지 않고 모델 변경 또는 배포 직전에 별도로 실행한다.
 
 검사를 실행하지 못했으면 통과로 표현하지 않고 이유와 남은 검증을 보고한다. 외부 서비스 상태는 해당 서비스의 실제 헬스·쿼리로 확인한다.
