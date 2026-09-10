@@ -135,14 +135,16 @@ class TimelinePipeline:
             run_id=run_id,
         )
         logger.info(
-            "pipeline intent: run_id=%s needs_clarification=%s intent=%s",
+            "pipeline intent: run_id=%s needs_clarification=%s user_specified_date=%s intent=%s",
             run_id,
             interpretation.needs_clarification,
+            interpretation.user_specified_date,
             interpretation.intent,
             extra={
                 "event_name": "pipeline.intent",
                 "run_id": run_id,
                 "needs_clarification": interpretation.needs_clarification,
+                "user_specified_date": interpretation.user_specified_date,
                 "interpreted_intent": interpretation.intent,
             },
         )
@@ -178,6 +180,8 @@ class TimelinePipeline:
             normalized_topic,
             interpretation.intent,
             hypothetical,
+            user_specified_date=interpretation.user_specified_date,
+            clarification_count=clarification_count,
             run_id=run_id,
         )
 
@@ -187,6 +191,8 @@ class TimelinePipeline:
         intent: str,
         hypothetical: HypotheticalTimeline,
         *,
+        user_specified_date: bool,
+        clarification_count: int,
         run_id: str,
     ) -> TimelineGenerationResult:
         selected_by_id: dict[int, SelectedArticle] = {}
@@ -225,12 +231,15 @@ class TimelinePipeline:
             if bounded_date_from > bounded_date_to:
                 bounded_date_from = date_from
                 bounded_date_to = date_to
+            apply_date_filter = user_specified_date or round_number > 1
+            applied_date_from = bounded_date_from if apply_date_filter else None
+            applied_date_to = bounded_date_to if apply_date_filter else None
             search_request = search_request.model_copy(
                 update={
                     "options": SearchOptions(
                         top_k=self._config.search_top_k,
-                        date_from=bounded_date_from,
-                        date_to=bounded_date_to,
+                        date_from=applied_date_from,
+                        date_to=applied_date_to,
                     )
                 }
             )
@@ -244,8 +253,8 @@ class TimelinePipeline:
                 draft.semantic_text,
                 draft.date_from,
                 draft.date_to,
-                bounded_date_from,
-                bounded_date_to,
+                applied_date_from,
+                applied_date_to,
                 draft.reason,
                 extra={
                     "event_name": "pipeline.search.request",
@@ -256,8 +265,10 @@ class TimelinePipeline:
                     "semantic_text": draft.semantic_text,
                     "requested_date_from": draft.date_from.isoformat(),
                     "requested_date_to": draft.date_to.isoformat(),
-                    "applied_date_from": bounded_date_from.isoformat(),
-                    "applied_date_to": bounded_date_to.isoformat(),
+                    "applied_date_from": (
+                        applied_date_from.isoformat() if applied_date_from else None
+                    ),
+                    "applied_date_to": applied_date_to.isoformat() if applied_date_to else None,
                     "search_reason": draft.reason,
                 },
             )
@@ -295,6 +306,33 @@ class TimelinePipeline:
                 return TimelineGenerationResult(
                     status=GenerationStatus.NO_ARTICLES,
                     rounds=1,
+                )
+
+            candidate_years = sorted({article.service_date.year for article in candidate_articles})
+            if (
+                round_number == 1
+                and not user_specified_date
+                and len(candidate_years) > 1
+                and clarification_count < self._config.max_clarifications
+            ):
+                question = (
+                    f"{', '.join(str(year) for year in candidate_years)}년 중 어느 시기의 사건을 "
+                    "말씀하시나요?"
+                )
+                logger.info(
+                    "pipeline period clarification: run_id=%s candidate_years=%s",
+                    run_id,
+                    tuple(candidate_years),
+                    extra={
+                        "event_name": "pipeline.period_clarification",
+                        "run_id": run_id,
+                        "candidate_years": tuple(candidate_years),
+                    },
+                )
+                self._emit(0, PipelineStage.CLARIFY, 0, run_id=run_id)
+                return TimelineGenerationResult(
+                    status=GenerationStatus.NEEDS_CLARIFICATION,
+                    clarification_question=question,
                 )
 
             articles_by_id.update({article.article_id: article for article in candidate_articles})
@@ -628,7 +666,9 @@ def _intent_prompt(topic: str, clarification_answer: str | None) -> str:
 사용자의 보충 답변: {answer}
 
 사건 범위와 관점을 한 문장의 intent로 정리하세요. 사건을 특정할 수 없으면 임의로 좁히지
-말고 needs_clarification=true와 질문 하나만 반환하세요. 보충 답변이 있으면 함께 반영하세요.
+말고 needs_clarification=true와 질문 하나만 반환하세요. 토픽 또는 보충 답변에 연도·월·일·
+기간 표현이 있으면 user_specified_date=true, 없으면 false로 반환하세요. 날짜가 없다는 이유만으로
+되묻지 말고 보충 답변이 있으면 함께 반영하세요.
 """
 
 

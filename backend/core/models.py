@@ -344,6 +344,7 @@ class PipelineProgress(DomainModel):
 
 class IntentInterpretation(DomainModel):
     intent: str = Field(min_length=1)
+    user_specified_date: bool = False
     needs_clarification: bool
     clarification_question: str | None = None
 

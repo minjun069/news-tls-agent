@@ -78,18 +78,23 @@ class ScriptedGenerator:
         return response
 
 
-def article(article_id: int = 1) -> Article:
+def article(article_id: int = 1, *, published_on: date | None = None) -> Article:
     return Article(
         article_id=article_id,
         title=f"실제 기사 {article_id}",
-        service_date=date(2025, 1, article_id),
+        service_date=published_on or date(2025, 1, article_id),
         content=f"실제 본문 {article_id}",
     )
 
 
-def intent(*, needs_clarification: bool = False) -> IntentInterpretation:
+def intent(
+    *,
+    needs_clarification: bool = False,
+    user_specified_date: bool = True,
+) -> IntentInterpretation:
     return IntentInterpretation(
         intent="대통령 탄핵 사건의 진행",
+        user_specified_date=user_specified_date,
         needs_clarification=needs_clarification,
         clarification_question="어느 나라 사건인가요?" if needs_clarification else None,
     )
@@ -519,3 +524,103 @@ def test_pipeline_logs_one_run_search_restore_and_selection_details(caplog) -> N
     assert {record.run_id for record in by_event.values()} == {"run-rh01"}
     assert "실제 본문" not in caplog.text
     assert "test-key" not in caplog.text
+
+
+def test_pipeline_searches_full_archive_when_user_did_not_specify_a_date() -> None:
+    repository = FakeRepository([article(1, published_on=date(2025, 3, 22))])
+    searcher = FakeSearcher(
+        [SearchResult(method=SearchMethod.KEYWORD, hits=(SearchHit(article_id=1, score=4),))]
+    )
+    generator = ScriptedGenerator(
+        {
+            IntentInterpretation: [intent(user_specified_date=False)],
+            HypotheticalTimeline: [
+                HypotheticalTimeline(
+                    date_from=date(2024, 3, 1),
+                    date_to=date(2024, 3, 31),
+                    events=(
+                        HypotheticalEvent(
+                            expected_date=date(2024, 3, 15),
+                            description="잘못 추정한 산불 시기",
+                        ),
+                    ),
+                )
+            ],
+            SearchQueryDraft: [
+                SearchQueryDraft(
+                    method=SearchMethod.KEYWORD,
+                    reason="산불 지역명",
+                    keyword_terms=("영남권", "산불"),
+                    date_from=date(2024, 3, 1),
+                    date_to=date(2024, 3, 31),
+                )
+            ],
+            ArticleSelection: [ArticleSelection(selected=(selected(),))],
+            RelatedEvents: [RelatedEvents()],
+            SufficiencyReview: [SufficiencyReview(is_sufficient=True)],
+            MergedTimeline: [merged(1)],
+        }
+    )
+    pipeline = TimelinePipeline(repository, searcher, generator, config(), sleeper=lambda _: None)
+
+    result = pipeline.generate("영남권 산불")
+
+    assert result.status is GenerationStatus.COMPLETED
+    assert searcher.requests[0].options.date_from is None
+    assert searcher.requests[0].options.date_to is None
+
+
+def test_pipeline_keeps_first_search_period_when_user_specified_a_date() -> None:
+    searcher = FakeSearcher([SearchResult(method=SearchMethod.KEYWORD, hits=())])
+    generator = ScriptedGenerator(
+        {
+            IntentInterpretation: [intent(user_specified_date=True)],
+            HypotheticalTimeline: [hypothetical()],
+            SearchQueryDraft: [draft()],
+        }
+    )
+    pipeline = TimelinePipeline(
+        FakeRepository([]),
+        searcher,
+        generator,
+        config(),
+        sleeper=lambda _: None,
+    )
+
+    result = pipeline.generate("2025년 대통령 탄핵")
+
+    assert result.status is GenerationStatus.NO_ARTICLES
+    assert searcher.requests[0].options.date_from == date(2025, 1, 1)
+    assert searcher.requests[0].options.date_to == date(2025, 1, 31)
+
+
+def test_pipeline_asks_for_period_only_after_multiple_years_are_found() -> None:
+    repository = FakeRepository(
+        [
+            article(1, published_on=date(2024, 3, 10)),
+            article(2, published_on=date(2025, 3, 22)),
+        ]
+    )
+    searcher = FakeSearcher(
+        [
+            SearchResult(
+                method=SearchMethod.KEYWORD,
+                hits=(SearchHit(article_id=1, score=4), SearchHit(article_id=2, score=3)),
+            )
+        ]
+    )
+    generator = ScriptedGenerator(
+        {
+            IntentInterpretation: [intent(user_specified_date=False)],
+            HypotheticalTimeline: [hypothetical()],
+            SearchQueryDraft: [draft()],
+        }
+    )
+    pipeline = TimelinePipeline(repository, searcher, generator, config(), sleeper=lambda _: None)
+
+    result = pipeline.generate("영남권 산불")
+
+    assert result.status is GenerationStatus.NEEDS_CLARIFICATION
+    assert result.clarification_question == "2024, 2025년 중 어느 시기의 사건을 말씀하시나요?"
+    assert len(searcher.requests) == 1
+    assert generator.prompts[ArticleSelection] == []
