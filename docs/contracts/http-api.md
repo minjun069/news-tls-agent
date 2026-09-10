@@ -188,7 +188,7 @@ data: {"question": "어느 시점의 계엄 관련 사건을 말씀하시나요?
 | 값 | 의미 |
 |---|---|
 | `sufficiency_passed` | 충분성 검토 통과 |
-| `converged` | 선정 기사 수 변화 없음 |
+| `converged` | 두 번째 라운드부터 새 선정 기사 ID가 추가되지 않음 |
 | `depth_limit` | 선후 이벤트 연쇄 깊이 상한 |
 | `round_limit` | 최대 라운드 도달 |
 | `cached` | 기존 이슈 재사용 |

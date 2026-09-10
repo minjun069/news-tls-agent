@@ -204,7 +204,7 @@ class TimelinePipeline:
         pending_seeds = list(hypothetical.events)
         date_from = hypothetical.date_from
         date_to = hypothetical.date_to
-        previous_selected_count = 0
+        previous_selected_ids: set[int] = set()
         chain_depth = 0
         termination: TerminationReason | None = None
         rounds = 0
@@ -389,6 +389,19 @@ class TimelinePipeline:
                     clarification_question=question,
                 )
 
+            if not candidate_articles:
+                if round_number >= 2:
+                    termination = TerminationReason.CONVERGED
+                    self._emit(
+                        round_number,
+                        PipelineStage.GENERATE_SEARCH_QUERY,
+                        len(selected_by_id),
+                        termination=termination,
+                        run_id=run_id,
+                    )
+                    break
+                continue
+
             articles_by_id.update({article.article_id: article for article in candidate_articles})
             candidate_ids = {article.article_id for article in candidate_articles}
 
@@ -403,39 +416,113 @@ class TimelinePipeline:
                 ArticleSelection,
                 run_id=run_id,
             )
-            round_selected: list[SelectedArticle] = []
-            for selected in selection.selected:
-                if selected.article_id not in candidate_ids:
-                    continue
-                round_selected.append(selected)
+            (
+                round_selected,
+                round_rejected,
+                unclassified_ids,
+                unexpected_ids,
+                classification_complete,
+            ) = _selection_details(selection, candidate_ids)
+            selection_attempt = 1
+            if not classification_complete or not round_selected:
+                logger.info(
+                    "pipeline selection retry: run_id=%s round=%s selected_ids=%s "
+                    "rejected=%s unclassified_ids=%s unexpected_ids=%s",
+                    run_id,
+                    round_number,
+                    tuple(item.article_id for item in round_selected),
+                    tuple((item.article_id, item.reason) for item in round_rejected),
+                    unclassified_ids,
+                    unexpected_ids,
+                    extra={
+                        "event_name": "pipeline.selection.retry",
+                        "run_id": run_id,
+                        "round_number": round_number,
+                        "selection_attempt": selection_attempt,
+                        "selected_article_ids": tuple(item.article_id for item in round_selected),
+                        "rejected_articles": tuple(
+                            (item.article_id, item.reason) for item in round_rejected
+                        ),
+                        "unclassified_article_ids": unclassified_ids,
+                        "unexpected_article_ids": unexpected_ids,
+                    },
+                )
+                selection = self._call_llm(
+                    _selection_retry_prompt(
+                        intent,
+                        candidate_articles,
+                        selection,
+                        unclassified_ids,
+                        unexpected_ids,
+                    ),
+                    ArticleSelection,
+                    run_id=run_id,
+                )
+                (
+                    round_selected,
+                    round_rejected,
+                    unclassified_ids,
+                    unexpected_ids,
+                    classification_complete,
+                ) = _selection_details(selection, candidate_ids)
+                selection_attempt = 2
+
+            if unclassified_ids:
+                round_rejected = (
+                    *round_rejected,
+                    *(
+                        RejectedArticle(
+                            article_id=article_id,
+                            reason="P4 응답에서 선정 또는 탈락으로 분류하지 않음",
+                        )
+                        for article_id in unclassified_ids
+                    ),
+                )
+
+            for selected in round_selected:
                 previous = selected_by_id.get(selected.article_id)
                 if previous is None or selected.relevance_score > previous.relevance_score:
                     selected_by_id[selected.article_id] = selected
-            rejected_history.extend(
-                rejected for rejected in selection.rejected if rejected.article_id in candidate_ids
-            )
+            rejected_history.extend(round_rejected)
+            new_selected_ids = set(selected_by_id) - previous_selected_ids
             logger.info(
-                "pipeline selection: run_id=%s round=%s selected_ids=%s rejected=%s",
+                "pipeline selection: run_id=%s round=%s attempt=%s complete=%s "
+                "selected_ids=%s rejected=%s unclassified_ids=%s unexpected_ids=%s",
                 run_id,
                 round_number,
+                selection_attempt,
+                classification_complete,
                 tuple(item.article_id for item in round_selected),
-                tuple(
-                    (item.article_id, item.reason)
-                    for item in selection.rejected
-                    if item.article_id in candidate_ids
-                ),
+                tuple((item.article_id, item.reason) for item in round_rejected),
+                unclassified_ids,
+                unexpected_ids,
                 extra={
                     "event_name": "pipeline.selection",
                     "run_id": run_id,
                     "round_number": round_number,
+                    "selection_attempt": selection_attempt,
+                    "classification_complete": classification_complete,
                     "selected_article_ids": tuple(item.article_id for item in round_selected),
                     "rejected_articles": tuple(
-                        (item.article_id, item.reason)
-                        for item in selection.rejected
-                        if item.article_id in candidate_ids
+                        (item.article_id, item.reason) for item in round_rejected
                     ),
+                    "unclassified_article_ids": unclassified_ids,
+                    "unexpected_article_ids": unexpected_ids,
                 },
             )
+
+            if not round_selected:
+                if round_number >= 2:
+                    termination = TerminationReason.CONVERGED
+                    self._emit(
+                        round_number,
+                        PipelineStage.SELECT_ARTICLES,
+                        len(selected_by_id),
+                        termination=termination,
+                        run_id=run_id,
+                    )
+                    break
+                continue
 
             related_events: tuple[RelatedEvent, ...] = ()
             if round_selected:
@@ -483,7 +570,7 @@ class TimelinePipeline:
             selected_count = len(selected_by_id)
             if review.is_sufficient:
                 termination = TerminationReason.SUFFICIENCY_PASSED
-            elif selected_count == previous_selected_count:
+            elif round_number >= 2 and not new_selected_ids:
                 termination = TerminationReason.CONVERGED
             elif chain_depth >= self._config.max_chain_depth:
                 termination = TerminationReason.DEPTH_LIMIT
@@ -519,7 +606,7 @@ class TimelinePipeline:
                 for event in related_events
             ]
             pending_seeds.extend(additional.events)
-            previous_selected_count = selected_count
+            previous_selected_ids = set(selected_by_id)
 
         if not selected_by_id:
             logger.info(
@@ -774,6 +861,43 @@ def _format_articles(articles: Sequence[Article]) -> str:
     return "\n\n".join(blocks) or "없음"
 
 
+def _selection_details(
+    selection: ArticleSelection,
+    candidate_ids: set[int],
+) -> tuple[
+    tuple[SelectedArticle, ...],
+    tuple[RejectedArticle, ...],
+    tuple[int, ...],
+    tuple[int, ...],
+    bool,
+]:
+    selected_by_id: dict[int, SelectedArticle] = {}
+    for item in selection.selected:
+        if item.article_id not in candidate_ids:
+            continue
+        previous = selected_by_id.get(item.article_id)
+        if previous is None or item.relevance_score > previous.relevance_score:
+            selected_by_id[item.article_id] = item
+
+    rejected_by_id: dict[int, RejectedArticle] = {}
+    for item in selection.rejected:
+        if item.article_id in candidate_ids and item.article_id not in selected_by_id:
+            rejected_by_id.setdefault(item.article_id, item)
+
+    raw_ids = [item.article_id for item in (*selection.selected, *selection.rejected)]
+    classified_ids = set(raw_ids)
+    unclassified_ids = tuple(sorted(candidate_ids - classified_ids))
+    unexpected_ids = tuple(sorted(classified_ids - candidate_ids))
+    classification_complete = len(raw_ids) == len(candidate_ids) and classified_ids == candidate_ids
+    return (
+        tuple(selected_by_id.values()),
+        tuple(rejected_by_id.values()),
+        unclassified_ids,
+        unexpected_ids,
+        classification_complete,
+    )
+
+
 def _selection_prompt(intent: str, articles: Sequence[Article]) -> str:
     return f"""P4 핵심 이벤트 선정
 의도: {intent}
@@ -783,6 +907,29 @@ def _selection_prompt(intent: str, articles: Sequence[Article]) -> str:
 입력 ARTICLE_ID만 사용하세요. 이 사건에 실제로 속하는 기사는 모두 selected에 넣고,
 event_date·event_summary·0~1 relevance_score를 반환하세요. 탈락 기사는 rejected에 이유를
 남기세요. 같은 사건을 다룬 여러 기사도 이 단계에서는 모두 선택하세요.
+"""
+
+
+def _selection_retry_prompt(
+    intent: str,
+    articles: Sequence[Article],
+    previous: ArticleSelection,
+    unclassified_ids: Sequence[int],
+    unexpected_ids: Sequence[int],
+) -> str:
+    return f"""P4 핵심 이벤트 선정 수정
+의도: {intent}
+검색 결과 기사:
+{_format_articles(articles)}
+
+이전 판정:
+{previous.model_dump_json()}
+미분류 ARTICLE_ID: {tuple(unclassified_ids)}
+입력에 없던 ARTICLE_ID: {tuple(unexpected_ids)}
+
+검색 결과의 모든 ARTICLE_ID를 정확히 한 번만 판정하세요. 실제 사건에 속하면 selected에
+event_date·event_summary·0~1 relevance_score와 함께 넣고, 속하지 않으면 rejected에 구체적인
+탈락 사유와 함께 넣으세요. 입력에 없는 ARTICLE_ID는 반환하지 마세요.
 """
 
 
