@@ -111,6 +111,9 @@ Base URL: `http://localhost:8000`
 `clarification_count`는 현재 요청 전에 받은 되묻기 횟수이며 0부터 시작한다. 서버가 대화
 세션을 저장하지 않으므로 클라이언트가 응답과 함께 횟수를 보관해 다음 요청에 보낸다.
 
+서버는 요청마다 내부 실행 ID를 만들고 P1~P8의 검색·선정·종료 로그를 같은 ID로 연결한다.
+이 실행 ID는 현재 SSE 공개 필드가 아니며 서버 장애 분석에만 사용한다.
+
 **Response** — `text/event-stream`
 
 ### 5.1 정상 흐름
@@ -390,6 +393,8 @@ data: {"reason": "insufficient_events", "message": "그래프를 표시할 만�
 
 P9 호출이나 기사 단위 저장에 실패하면 `reason: "extraction_failed"`, `retryable: true`를
 반환한다. 외부 API 호출 한도 초과는 `reason: "rate_limited"`로 구분한다.
+서버 로그는 그래프 실행 ID와 실패 기사 ID, `ArticleGraphExtraction` 응답 타입 및 구조 검증
+오류를 남기며 기사 본문은 남기지 않는다.
 
 ---
 

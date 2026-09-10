@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections import defaultdict, deque
 from datetime import date, datetime
 
@@ -63,6 +64,8 @@ class FakeSearcher:
 
 
 class ScriptedGenerator:
+    model_name = "test-model"
+
     def __init__(self, responses: dict[type, list[object]]) -> None:
         self.responses = {key: deque(values) for key, values in responses.items()}
         self.prompts = defaultdict(list)
@@ -456,3 +459,63 @@ def test_pipeline_excludes_rejected_articles_and_bounds_search_period() -> None:
     assert "ARTICLE_ID: 1" not in generator.prompts[ArticleSelection][1]
     assert searcher.requests[1].options.date_from == date(2025, 1, 1)
     assert searcher.requests[1].options.date_to == date(2025, 1, 31)
+
+
+def test_pipeline_logs_one_run_search_restore_and_selection_details(caplog) -> None:
+    repository = FakeRepository([article(1), article(2)])
+    searcher = FakeSearcher(
+        [
+            SearchResult(
+                method=SearchMethod.KEYWORD,
+                hits=(
+                    SearchHit(article_id=1, score=4),
+                    SearchHit(article_id=2, score=3),
+                    SearchHit(article_id=999, score=2),
+                ),
+            )
+        ]
+    )
+    generator = ScriptedGenerator(
+        {
+            IntentInterpretation: [intent()],
+            HypotheticalTimeline: [hypothetical()],
+            SearchQueryDraft: [draft()],
+            ArticleSelection: [
+                ArticleSelection(
+                    selected=(selected(1),),
+                    rejected=({"article_id": 2, "reason": "다른 사건"},),
+                )
+            ],
+            RelatedEvents: [RelatedEvents()],
+            SufficiencyReview: [SufficiencyReview(is_sufficient=True)],
+            MergedTimeline: [merged(1)],
+        }
+    )
+    pipeline = TimelinePipeline(
+        repository,
+        searcher,
+        generator,
+        config(),
+        sleeper=lambda _: None,
+        run_id_factory=lambda: "run-rh01",
+    )
+
+    with caplog.at_level(logging.INFO, logger="news_tls_agent.pipeline"):
+        pipeline.generate("관측 테스트")
+
+    by_event = {
+        record.event_name: record for record in caplog.records if hasattr(record, "event_name")
+    }
+    assert by_event["pipeline.started"].run_id == "run-rh01"
+    assert by_event["pipeline.started"].model_name == "test-model"
+    assert by_event["pipeline.intent"].needs_clarification is False
+    assert by_event["pipeline.hypothetical"].date_from == "2025-01-01"
+    assert by_event["pipeline.search.request"].keyword_terms == ("탄핵", "대통령")
+    assert by_event["pipeline.search.request"].applied_date_to == "2025-01-31"
+    assert by_event["pipeline.search.result"].qdrant_result_count == 3
+    assert by_event["pipeline.search.result"].mssql_restored_count == 2
+    assert by_event["pipeline.selection"].selected_article_ids == (1,)
+    assert by_event["pipeline.selection"].rejected_articles == ((2, "다른 사건"),)
+    assert {record.run_id for record in by_event.values()} == {"run-rh01"}
+    assert "실제 본문" not in caplog.text
+    assert "test-key" not in caplog.text

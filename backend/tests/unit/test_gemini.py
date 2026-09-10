@@ -42,10 +42,12 @@ def generator(models: FakeModels) -> GeminiStructuredGenerator:
 
 def test_gemini_generator_uses_response_schema_and_returns_parsed_model() -> None:
     models = FakeModels(response=SimpleNamespace(parsed=Probe(ok=True), text=None))
+    subject = generator(models)
 
-    result = generator(models).generate("probe", Probe)
+    result = subject.generate("probe", Probe)
 
     assert result == Probe(ok=True)
+    assert subject.model_name == "gemini-test"
     call = models.calls[0]
     assert call["model"] == "gemini-test"
     assert call["config"].response_mime_type == "application/json"

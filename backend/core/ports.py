@@ -72,6 +72,11 @@ class PlannedArticleSearcher(Protocol):
 
 
 class StructuredGenerator(Protocol):
+    @property
+    def model_name(self) -> str:
+        """관측 로그에 남길 생성 모델 식별자를 반환한다."""
+        ...
+
     def generate(
         self,
         prompt: str,

@@ -91,6 +91,8 @@ class FakeRepository:
 
 
 class FakeGenerator:
+    model_name = "test-model"
+
     def __init__(self) -> None:
         self.prompts: list[str] = []
 
@@ -152,3 +154,38 @@ def test_extraction_rejects_relations_without_article_entities() -> None:
             entities=(ExtractedEntity(name="기관", entity_type="기관"),),
             relations=(ExtractedRelation(source="기관", target="사건", relation_type="발표"),),
         )
+
+
+class InvalidGraphGenerator:
+    model_name = "test-model"
+
+    def generate(self, prompt: str, response_type):
+        assert response_type is ArticleGraphExtraction
+        return ArticleGraphExtraction(
+            entities=(ExtractedEntity(name="기관", entity_type="기관"),),
+            relations=(ExtractedRelation(source="기관", target="없는 사건", relation_type="발표"),),
+        )
+
+
+def test_graph_logs_failed_article_and_validation_error(caplog) -> None:
+    service = KnowledgeGraphService(
+        FakeRepository(make_issue()),
+        InvalidGraphGenerator(),
+        run_id_factory=lambda: "graph-rh01",
+    )
+
+    with caplog.at_level("INFO", logger="news_tls_agent.graph"):
+        with pytest.raises(ValidationError, match="entities에 있어야"):
+            service.build(7)
+
+    failure = next(
+        record
+        for record in caplog.records
+        if getattr(record, "event_name", None) == "graph.extraction.failed"
+    )
+    assert failure.run_id == "graph-rh01"
+    assert failure.article_id == 2
+    assert failure.response_type == "ArticleGraphExtraction"
+    assert failure.error_type == "ValidationError"
+    assert "entities에 있어야" in failure.validation_error
+    assert "기관 2가 사건 2" not in caplog.text
