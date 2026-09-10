@@ -22,6 +22,11 @@ class GeminiStructuredGenerator:
         self._model = config.model
         self._client = client or genai.Client(api_key=config.api_key)
 
+    @property
+    def model_name(self) -> str:
+        """프롬프트나 자격증명 없이 실행 모델만 관측 계층에 노출한다."""
+        return self._model
+
     def generate(self, prompt: str, response_type: type[ResponseModel]) -> ResponseModel:
         try:
             response = self._client.models.generate_content(

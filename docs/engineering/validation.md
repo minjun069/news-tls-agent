@@ -61,4 +61,9 @@ API/MCP → 웹 순서로 준비한다. 실제 뉴스 적재는 서비스 기동
 `make mcp-inspect`는 `@modelcontextprotocol/inspector@2.5.0`을 고정해 사용하며 Node.js 22.19
 이상이 필요하다. WSL에서는 같은 WSL 환경의 Linux용 `node`·`npx`로 실행한다.
 
+RH-01 관측 회귀는 `backend/tests/unit/test_pipeline.py`가 한 실행 ID 아래 P1·P2·P3,
+Qdrant 결과 수, MS-SQL 복원 수, P4 선정·탈락 필드를 검사한다. `test_graph.py`는 잘못된 관계
+끝점이 있을 때 그래프 실행 ID, 실패 기사 ID, 응답 타입과 Pydantic 검증 오류가 남는지 검사한다.
+두 검사 모두 API 키와 기사 본문이 로그에 포함되지 않는지도 확인하며 `make check`에 포함된다.
+
 검사를 실행하지 못했으면 통과로 표현하지 않고 이유와 남은 검증을 보고한다. 외부 서비스 상태는 해당 서비스의 실제 헬스·쿼리로 확인한다.

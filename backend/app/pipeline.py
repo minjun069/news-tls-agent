@@ -7,6 +7,7 @@ import time
 from collections.abc import Callable, Sequence
 from datetime import UTC, date, datetime
 from typing import TypeVar
+from uuid import uuid4
 
 from pydantic import BaseModel
 
@@ -43,11 +44,16 @@ logger = logging.getLogger("news_tls_agent.pipeline")
 ProgressSink = Callable[[PipelineProgress], None]
 Clock = Callable[[], datetime]
 Sleeper = Callable[[float], None]
+RunIdFactory = Callable[[], str]
 ResponseModel = TypeVar("ResponseModel", bound=BaseModel)
 
 
 def _utc_now() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
+
+
+def _new_run_id() -> str:
+    return str(uuid4())
 
 
 class TimelinePipeline:
@@ -63,14 +69,17 @@ class TimelinePipeline:
         progress_sink: ProgressSink | None = None,
         clock: Clock = _utc_now,
         sleeper: Sleeper = time.sleep,
+        run_id_factory: RunIdFactory = _new_run_id,
     ) -> None:
         self._repository = repository
         self._searcher = searcher
         self._generator = generator
+        self._model_name = getattr(generator, "model_name", type(generator).__name__)
         self._config = config
         self._progress_sink = progress_sink
         self._clock = clock
         self._sleeper = sleeper
+        self._run_id_factory = run_id_factory
 
     def generate(
         self,
@@ -79,11 +88,23 @@ class TimelinePipeline:
         clarification_answer: str | None = None,
         clarification_count: int = 0,
     ) -> TimelineGenerationResult:
+        run_id = self._run_id_factory()
         normalized_topic = " ".join(topic.split())
         if not normalized_topic:
             raise ValueError("토픽은 빈 문자열일 수 없습니다")
         if clarification_count < 0:
             raise ValueError("clarification_count는 0 이상이어야 합니다")
+
+        logger.info(
+            "pipeline started: run_id=%s model=%s",
+            run_id,
+            self._model_name,
+            extra={
+                "event_name": "pipeline.started",
+                "run_id": run_id,
+                "model_name": self._model_name,
+            },
+        )
 
         existing = self._repository.find_issue_by_topic(normalized_topic)
         if existing is not None:
@@ -92,6 +113,7 @@ class TimelinePipeline:
                 stage=PipelineStage.CACHED,
                 selected_count=sum(len(event.articles) for event in existing.events),
                 termination=TerminationReason.CACHED,
+                run_id=run_id,
             )
             return TimelineGenerationResult(
                 status=GenerationStatus.REUSED,
@@ -106,33 +128,66 @@ class TimelinePipeline:
                 ),
             )
 
-        self._emit(0, PipelineStage.INTERPRET_INTENT, 0)
+        self._emit(0, PipelineStage.INTERPRET_INTENT, 0, run_id=run_id)
         interpretation = self._call_llm(
             _intent_prompt(normalized_topic, clarification_answer),
             IntentInterpretation,
+            run_id=run_id,
+        )
+        logger.info(
+            "pipeline intent: run_id=%s needs_clarification=%s intent=%s",
+            run_id,
+            interpretation.needs_clarification,
+            interpretation.intent,
+            extra={
+                "event_name": "pipeline.intent",
+                "run_id": run_id,
+                "needs_clarification": interpretation.needs_clarification,
+                "interpreted_intent": interpretation.intent,
+            },
         )
         if (
             interpretation.needs_clarification
             and clarification_count < self._config.max_clarifications
         ):
-            self._emit(0, PipelineStage.CLARIFY, 0)
+            self._emit(0, PipelineStage.CLARIFY, 0, run_id=run_id)
             return TimelineGenerationResult(
                 status=GenerationStatus.NEEDS_CLARIFICATION,
                 clarification_question=interpretation.clarification_question,
             )
 
-        self._emit(0, PipelineStage.BUILD_HYPOTHETICAL_TIMELINE, 0)
+        self._emit(0, PipelineStage.BUILD_HYPOTHETICAL_TIMELINE, 0, run_id=run_id)
         hypothetical = self._call_llm(
             _hypothetical_timeline_prompt(interpretation.intent),
             HypotheticalTimeline,
+            run_id=run_id,
         )
-        return self._collect_and_save(normalized_topic, interpretation.intent, hypothetical)
+        logger.info(
+            "pipeline hypothetical: run_id=%s date_from=%s date_to=%s",
+            run_id,
+            hypothetical.date_from,
+            hypothetical.date_to,
+            extra={
+                "event_name": "pipeline.hypothetical",
+                "run_id": run_id,
+                "date_from": hypothetical.date_from.isoformat(),
+                "date_to": hypothetical.date_to.isoformat(),
+            },
+        )
+        return self._collect_and_save(
+            normalized_topic,
+            interpretation.intent,
+            hypothetical,
+            run_id=run_id,
+        )
 
     def _collect_and_save(
         self,
         topic: str,
         intent: str,
         hypothetical: HypotheticalTimeline,
+        *,
+        run_id: str,
     ) -> TimelineGenerationResult:
         selected_by_id: dict[int, SelectedArticle] = {}
         articles_by_id: dict[int, Article] = {}
@@ -151,6 +206,7 @@ class TimelinePipeline:
                 round_number,
                 PipelineStage.GENERATE_SEARCH_QUERY,
                 len(selected_by_id),
+                run_id=run_id,
             )
             draft = self._call_llm(
                 _search_query_prompt(
@@ -161,12 +217,7 @@ class TimelinePipeline:
                     rejected_history,
                 ),
                 SearchQueryDraft,
-            )
-            logger.info(
-                "pipeline search: round=%s method=%s reason=%s",
-                round_number,
-                draft.method,
-                draft.reason,
+                run_id=run_id,
             )
             search_request = draft.to_search_request(top_k=self._config.search_top_k)
             bounded_date_from = max(date_from, draft.date_from)
@@ -183,13 +234,64 @@ class TimelinePipeline:
                     )
                 }
             )
+            logger.info(
+                "pipeline search request: run_id=%s round=%s method=%s "
+                "keywords=%s semantic=%s requested_period=%s..%s applied_period=%s..%s reason=%s",
+                run_id,
+                round_number,
+                draft.method,
+                draft.keyword_terms,
+                draft.semantic_text,
+                draft.date_from,
+                draft.date_to,
+                bounded_date_from,
+                bounded_date_to,
+                draft.reason,
+                extra={
+                    "event_name": "pipeline.search.request",
+                    "run_id": run_id,
+                    "round_number": round_number,
+                    "search_method": draft.method.value,
+                    "keyword_terms": draft.keyword_terms,
+                    "semantic_text": draft.semantic_text,
+                    "requested_date_from": draft.date_from.isoformat(),
+                    "requested_date_to": draft.date_to.isoformat(),
+                    "applied_date_from": bounded_date_from.isoformat(),
+                    "applied_date_to": bounded_date_to.isoformat(),
+                    "search_reason": draft.reason,
+                },
+            )
             search_result = self._searcher.search_request(search_request)
             rejected_ids = {rejected.article_id for rejected in rejected_history}
             candidate_articles = self._repository.get_articles(
                 [hit.article_id for hit in search_result.hits if hit.article_id not in rejected_ids]
             )
+            logger.info(
+                "pipeline search result: run_id=%s round=%s qdrant_hits=%s mssql_articles=%s",
+                run_id,
+                round_number,
+                len(search_result.hits),
+                len(candidate_articles),
+                extra={
+                    "event_name": "pipeline.search.result",
+                    "run_id": run_id,
+                    "round_number": round_number,
+                    "qdrant_result_count": len(search_result.hits),
+                    "mssql_restored_count": len(candidate_articles),
+                },
+            )
             if round_number == 1 and not candidate_articles:
-                logger.info("pipeline terminated: round=1 reason=no_articles selected=0")
+                logger.info(
+                    "pipeline terminated: run_id=%s round=1 reason=no_articles selected=0",
+                    run_id,
+                    extra={
+                        "event_name": "pipeline.terminated",
+                        "run_id": run_id,
+                        "round_number": 1,
+                        "termination_reason": GenerationStatus.NO_ARTICLES.value,
+                        "selected_article_count": 0,
+                    },
+                )
                 return TimelineGenerationResult(
                     status=GenerationStatus.NO_ARTICLES,
                     rounds=1,
@@ -198,10 +300,16 @@ class TimelinePipeline:
             articles_by_id.update({article.article_id: article for article in candidate_articles})
             candidate_ids = {article.article_id for article in candidate_articles}
 
-            self._emit(round_number, PipelineStage.SELECT_ARTICLES, len(selected_by_id))
+            self._emit(
+                round_number,
+                PipelineStage.SELECT_ARTICLES,
+                len(selected_by_id),
+                run_id=run_id,
+            )
             selection = self._call_llm(
                 _selection_prompt(intent, candidate_articles),
                 ArticleSelection,
+                run_id=run_id,
             )
             round_selected: list[SelectedArticle] = []
             for selected in selection.selected:
@@ -214,6 +322,28 @@ class TimelinePipeline:
             rejected_history.extend(
                 rejected for rejected in selection.rejected if rejected.article_id in candidate_ids
             )
+            logger.info(
+                "pipeline selection: run_id=%s round=%s selected_ids=%s rejected=%s",
+                run_id,
+                round_number,
+                tuple(item.article_id for item in round_selected),
+                tuple(
+                    (item.article_id, item.reason)
+                    for item in selection.rejected
+                    if item.article_id in candidate_ids
+                ),
+                extra={
+                    "event_name": "pipeline.selection",
+                    "run_id": run_id,
+                    "round_number": round_number,
+                    "selected_article_ids": tuple(item.article_id for item in round_selected),
+                    "rejected_articles": tuple(
+                        (item.article_id, item.reason)
+                        for item in selection.rejected
+                        if item.article_id in candidate_ids
+                    ),
+                },
+            )
 
             related_events: tuple[RelatedEvent, ...] = ()
             if round_selected:
@@ -221,6 +351,7 @@ class TimelinePipeline:
                     round_number,
                     PipelineStage.EXTRACT_RELATED_EVENTS,
                     len(selected_by_id),
+                    run_id=run_id,
                 )
                 related = self._call_llm(
                     _related_events_prompt(
@@ -230,6 +361,7 @@ class TimelinePipeline:
                         date_to,
                     ),
                     RelatedEvents,
+                    run_id=run_id,
                 )
                 round_selected_ids = {selected.article_id for selected in round_selected}
                 related_events = tuple(
@@ -245,10 +377,12 @@ class TimelinePipeline:
                 round_number,
                 PipelineStage.REVIEW_SUFFICIENCY,
                 len(selected_by_id),
+                run_id=run_id,
             )
             review = self._call_llm(
                 _sufficiency_prompt(intent, hypothetical, tuple(selected_by_id.values())),
                 SufficiencyReview,
+                run_id=run_id,
             )
             if review.updated_date_from is not None and review.updated_date_to is not None:
                 date_from = review.updated_date_from
@@ -269,6 +403,7 @@ class TimelinePipeline:
                 PipelineStage.REVIEW_SUFFICIENCY,
                 selected_count,
                 termination=termination,
+                run_id=run_id,
             )
             if termination is not None:
                 break
@@ -277,10 +412,12 @@ class TimelinePipeline:
                 round_number,
                 PipelineStage.GENERATE_HYPOTHESES,
                 selected_count,
+                run_id=run_id,
             )
             additional = self._call_llm(
                 _additional_hypotheses_prompt(review.gaps, tuple(selected_by_id.values())),
                 AdditionalHypotheses,
+                run_id=run_id,
             )
             pending_seeds = [
                 HypotheticalEvent(
@@ -294,8 +431,16 @@ class TimelinePipeline:
 
         if not selected_by_id:
             logger.info(
-                "pipeline terminated: round=%s reason=no_articles selected=0",
+                "pipeline terminated: run_id=%s round=%s reason=no_articles selected=0",
+                run_id,
                 rounds,
+                extra={
+                    "event_name": "pipeline.terminated",
+                    "run_id": run_id,
+                    "round_number": rounds,
+                    "termination_reason": GenerationStatus.NO_ARTICLES.value,
+                    "selected_article_count": 0,
+                },
             )
             return TimelineGenerationResult(
                 status=GenerationStatus.NO_ARTICLES,
@@ -305,20 +450,40 @@ class TimelinePipeline:
         if termination is None:
             raise PipelineInvariantError("수집 루프가 종료 사유 없이 끝났습니다")
 
-        self._emit(rounds, PipelineStage.MERGE_TIMELINE, len(selected_by_id))
+        self._emit(
+            rounds,
+            PipelineStage.MERGE_TIMELINE,
+            len(selected_by_id),
+            run_id=run_id,
+        )
         merged = self._call_llm(
             _merge_prompt(tuple(selected_by_id.values()), articles_by_id),
             MergedTimeline,
+            run_id=run_id,
         )
         issue = self._validated_issue(topic, merged, selected_by_id)
-        self._emit(rounds, PipelineStage.SAVE_ISSUE, len(selected_by_id))
+        self._emit(
+            rounds,
+            PipelineStage.SAVE_ISSUE,
+            len(selected_by_id),
+            run_id=run_id,
+        )
         issue_id = self._repository.save_issue(issue)
         logger.info(
-            "pipeline completed: rounds=%s selected=%s termination=%s issue_id=%s",
+            "pipeline completed: run_id=%s rounds=%s selected=%s termination=%s issue_id=%s",
+            run_id,
             rounds,
             len(selected_by_id),
             termination,
             issue_id,
+            extra={
+                "event_name": "pipeline.completed",
+                "run_id": run_id,
+                "round_number": rounds,
+                "selected_article_count": len(selected_by_id),
+                "termination_reason": termination.value,
+                "issue_id": issue_id,
+            },
         )
         return TimelineGenerationResult(
             status=GenerationStatus.COMPLETED,
@@ -380,8 +545,24 @@ class TimelinePipeline:
         self,
         prompt: str,
         response_type: type[ResponseModel],
+        *,
+        run_id: str,
     ) -> ResponseModel:
         for attempt in range(2):
+            logger.info(
+                "pipeline LLM call: run_id=%s model=%s response_type=%s attempt=%s",
+                run_id,
+                self._model_name,
+                response_type.__name__,
+                attempt + 1,
+                extra={
+                    "event_name": "pipeline.llm.call",
+                    "run_id": run_id,
+                    "model_name": self._model_name,
+                    "response_type": response_type.__name__,
+                    "attempt": attempt + 1,
+                },
+            )
             try:
                 return self._generator.generate(prompt, response_type)
             except LLMGenerationError:
@@ -389,9 +570,18 @@ class TimelinePipeline:
                     raise
                 delay = 2**attempt
                 logger.warning(
-                    "pipeline LLM retry: response_type=%s delay_seconds=%s",
+                    "pipeline LLM retry: run_id=%s model=%s response_type=%s delay_seconds=%s",
+                    run_id,
+                    self._model_name,
                     response_type.__name__,
                     delay,
+                    extra={
+                        "event_name": "pipeline.llm.retry",
+                        "run_id": run_id,
+                        "model_name": self._model_name,
+                        "response_type": response_type.__name__,
+                        "delay_seconds": delay,
+                    },
                 )
                 self._sleeper(delay)
         raise PipelineInvariantError("LLM 재시도 루프가 비정상 종료됐습니다")
@@ -403,6 +593,7 @@ class TimelinePipeline:
         selected_count: int,
         *,
         termination: TerminationReason | None = None,
+        run_id: str,
     ) -> None:
         progress = PipelineProgress(
             round_number=round_number,
@@ -411,11 +602,20 @@ class TimelinePipeline:
             termination=termination,
         )
         logger.info(
-            "pipeline progress: round=%s stage=%s selected=%s termination=%s",
+            "pipeline progress: run_id=%s round=%s stage=%s selected=%s termination=%s",
+            run_id,
             round_number,
             stage,
             selected_count,
             termination,
+            extra={
+                "event_name": "pipeline.progress",
+                "run_id": run_id,
+                "round_number": round_number,
+                "pipeline_stage": stage.value,
+                "selected_article_count": selected_count,
+                "termination_reason": termination.value if termination else None,
+            },
         )
         if self._progress_sink is not None:
             self._progress_sink(progress)

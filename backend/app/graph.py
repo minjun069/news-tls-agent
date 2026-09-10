@@ -2,13 +2,29 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
+from uuid import uuid4
 
 from core.errors import GraphExtractionError, InsufficientEventsError, IssueNotFoundError
 from core.models import Article, ArticleGraph, ArticleGraphExtraction, GraphProgress, IssueEvent
 from core.ports import Repository, StructuredGenerator
 
 GraphProgressSink = Callable[[GraphProgress], None]
+RunIdFactory = Callable[[], str]
+
+logger = logging.getLogger("news_tls_agent.graph")
+
+
+def _new_run_id() -> str:
+    return str(uuid4())
+
+
+def _root_error(exc: Exception) -> Exception:
+    current = exc
+    while isinstance(current.__cause__, Exception):
+        current = current.__cause__
+    return current
 
 
 class KnowledgeGraphService:
@@ -20,12 +36,30 @@ class KnowledgeGraphService:
         generator: StructuredGenerator,
         *,
         progress_sink: GraphProgressSink | None = None,
+        run_id_factory: RunIdFactory = _new_run_id,
     ) -> None:
         self._repository = repository
         self._generator = generator
         self._progress_sink = progress_sink
+        self._run_id_factory = run_id_factory
 
     def build(self, issue_id: int) -> tuple[ArticleGraph, ...]:
+        run_id = self._run_id_factory()
+        model_name = getattr(self._generator, "model_name", type(self._generator).__name__)
+        logger.info(
+            "graph started: run_id=%s issue_id=%s model=%s response_type=%s",
+            run_id,
+            issue_id,
+            model_name,
+            ArticleGraphExtraction.__name__,
+            extra={
+                "event_name": "graph.started",
+                "run_id": run_id,
+                "issue_id": issue_id,
+                "model_name": model_name,
+                "response_type": ArticleGraphExtraction.__name__,
+            },
+        )
         issue = self._repository.get_issue(issue_id)
         if issue is None:
             raise IssueNotFoundError(f"이슈를 찾을 수 없습니다: {issue_id}")
@@ -38,13 +72,46 @@ class KnowledgeGraphService:
             self._report(len(pending) - index)
             if not article.content or not article.content.strip():
                 raise GraphExtractionError(f"기사 본문이 비어 있습니다: {article.article_id}")
-            extraction = self._generator.generate(
-                _extraction_prompt(article),
-                ArticleGraphExtraction,
-            )
+            try:
+                extraction = self._generator.generate(
+                    _extraction_prompt(article),
+                    ArticleGraphExtraction,
+                )
+            except Exception as exc:
+                root_error = _root_error(exc)
+                logger.exception(
+                    "graph extraction failed: run_id=%s article_id=%s response_type=%s "
+                    "error_type=%s validation_error=%s",
+                    run_id,
+                    article.article_id,
+                    ArticleGraphExtraction.__name__,
+                    type(root_error).__name__,
+                    str(root_error),
+                    extra={
+                        "event_name": "graph.extraction.failed",
+                        "run_id": run_id,
+                        "article_id": article.article_id,
+                        "response_type": ArticleGraphExtraction.__name__,
+                        "error_type": type(root_error).__name__,
+                        "validation_error": str(root_error),
+                    },
+                )
+                raise
             try:
                 self._repository.replace_article_graph(article.article_id, extraction)
             except Exception as exc:
+                logger.exception(
+                    "graph save failed: run_id=%s article_id=%s error_type=%s",
+                    run_id,
+                    article.article_id,
+                    type(exc).__name__,
+                    extra={
+                        "event_name": "graph.save.failed",
+                        "run_id": run_id,
+                        "article_id": article.article_id,
+                        "error_type": type(exc).__name__,
+                    },
+                )
                 raise GraphExtractionError(
                     f"기사 그래프를 저장하지 못했습니다: {article.article_id}"
                 ) from exc
