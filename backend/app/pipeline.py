@@ -354,18 +354,18 @@ class TimelinePipeline:
                 )
                 if not candidate_articles:
                     logger.info(
-                        "pipeline terminated: run_id=%s round=1 reason=no_articles selected=0",
+                        "pipeline terminated: run_id=%s round=1 reason=search_no_hits selected=0",
                         run_id,
                         extra={
                             "event_name": "pipeline.terminated",
                             "run_id": run_id,
                             "round_number": 1,
-                            "termination_reason": GenerationStatus.NO_ARTICLES.value,
+                            "termination_reason": GenerationStatus.SEARCH_NO_HITS.value,
                             "selected_article_count": 0,
                         },
                     )
                     return TimelineGenerationResult(
-                        status=GenerationStatus.NO_ARTICLES,
+                        status=GenerationStatus.SEARCH_NO_HITS,
                         rounds=1,
                     )
 
@@ -617,19 +617,19 @@ class TimelinePipeline:
 
         if not selected_by_id:
             logger.info(
-                "pipeline terminated: run_id=%s round=%s reason=no_articles selected=0",
+                "pipeline terminated: run_id=%s round=%s reason=selection_rejected_all selected=0",
                 run_id,
                 rounds,
                 extra={
                     "event_name": "pipeline.terminated",
                     "run_id": run_id,
                     "round_number": rounds,
-                    "termination_reason": GenerationStatus.NO_ARTICLES.value,
+                    "termination_reason": GenerationStatus.SELECTION_REJECTED_ALL.value,
                     "selected_article_count": 0,
                 },
             )
             return TimelineGenerationResult(
-                status=GenerationStatus.NO_ARTICLES,
+                status=GenerationStatus.SELECTION_REJECTED_ALL,
                 termination=termination,
                 rounds=rounds,
             )

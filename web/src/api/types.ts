@@ -76,6 +76,7 @@ export interface StreamError {
   reason: string
   message: string
   retryable: boolean
+  retry_after_seconds?: number
 }
 
 export interface ChatHistoryItem {

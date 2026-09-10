@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { streamIssueGraph } from '../api/client'
+import { presentStreamError } from '../api/streamErrors'
+import type { StreamErrorAction } from '../api/streamErrors'
 import type { ArticleGraph } from '../api/types'
 import ArticleGraphCard from './ArticleGraphCard.vue'
 
@@ -12,12 +14,14 @@ const loading = ref(false)
 const remaining = ref(0)
 const graphs = ref<ArticleGraph[]>([])
 const error = ref('')
+const errorAction = ref<StreamErrorAction>('none')
 
 async function loadGraph() {
   if (loading.value || props.eventCount <= 1) return
   opened.value = true
   loading.value = true
   error.value = ''
+  errorAction.value = 'none'
   graphs.value = []
   try {
     await streamIssueGraph(props.issueId, {
@@ -28,11 +32,14 @@ async function loadGraph() {
         graphs.value = event.graphs
       },
       error: (event) => {
-        error.value = event.message
+        const presentation = presentStreamError(event)
+        error.value = presentation.message
+        errorAction.value = presentation.action
       },
     })
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : '지식 그래프를 불러오지 못했습니다.'
+    errorAction.value = 'retry'
   } finally {
     loading.value = false
   }
@@ -60,7 +67,7 @@ async function loadGraph() {
     </div>
     <div v-else-if="error" class="graph-error">
       <p>{{ error }}</p>
-      <button type="button" @click="loadGraph">다시 시도</button>
+      <button v-if="errorAction === 'retry'" type="button" @click="loadGraph">다시 시도</button>
     </div>
     <div v-else-if="graphs.length" class="graph-grid">
       <ArticleGraphCard

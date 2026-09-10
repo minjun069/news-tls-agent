@@ -74,7 +74,7 @@ RH-02 기간 회귀는 `backend/tests/unit/test_pipeline.py`에서 날짜 없는
 같이 검사한다.
 
 RH-03 무결과 회귀는 첫 검색이 0건일 때 원래 토픽·`hybrid`·기간 없음으로 두 번째 요청이
-정확히 한 번 만들어지는지 검사한다. 두 검색이 모두 비면 `no_articles`, 두 번째 검색에서 실제
+정확히 한 번 만들어지는지 검사한다. 두 검색이 모두 비면 `search_no_hits`, 두 번째 검색에서 실제
 기사 ID가 복원되면 P4 이후 생성 흐름이 이어지는지를 별도 사례로 확인한다.
 
 RH-04 선정·수렴 회귀는 P4 미분류 후보가 있거나 전건 탈락일 때 이전 판정과 탈락 사유를 넣은
@@ -106,5 +106,12 @@ RH-08 결정론적 회귀는 `make check`에서 파이프라인의 기간·검�
 않고 stdio MCP 서버의 `search_articles`를 `query="영남권 산불"`, 2025-01-01~2025-12-31,
 `method="hybrid"`, `top_k=20`으로 호출한다. `ok: true`인 MS-SQL 복원 기사 1건 이상과 모든
 서비스 일자가 2025년임을 확인하면 0, MCP 연결 실패는 2, 무결과·계약 위반은 3으로 종료한다.
+
+RH-09 오류 안내 회귀는 `backend/tests/unit/test_pipeline.py`가 실제 검색 무결과를
+`search_no_hits`, 검색 후보 전건 탈락을 `selection_rejected_all` 상태로 구분하는지 검사한다.
+`backend/tests/integration/test_api.py`는 두 상태와 모델·출력 오류의 SSE reason 및 `retryable`을
+검사한다. 프론트엔드는 `web/src/api/streamErrors.ts`에서 오류별 문구와 `토픽 수정`·`다시 시도`·
+버튼 없음 행동을 결정하며 `make web-check`로 타입과 프로덕션 빌드를 검증한다. 전체 사용자
+흐름은 `make test-e2e`로 다시 확인한다.
 
 검사를 실행하지 못했으면 통과로 표현하지 않고 이유와 남은 검증을 보고한다. 외부 서비스 상태는 해당 서비스의 실제 헬스·쿼리로 확인한다.

@@ -162,10 +162,17 @@ async def _generation_stream(
             },
         )
         return
-    if result.status is GenerationStatus.NO_ARTICLES:
+    if result.status is GenerationStatus.SEARCH_NO_HITS:
         yield _generation_error(
-            "no_articles",
-            "관련 기사를 찾지 못했습니다.",
+            "search_no_hits",
+            "검색 결과가 없습니다. 기간이나 핵심어를 바꿔 주세요.",
+            False,
+        )
+        return
+    if result.status is GenerationStatus.SELECTION_REJECTED_ALL:
+        yield _generation_error(
+            "selection_rejected_all",
+            "검색된 기사가 토픽의 근거로 충분하지 않습니다. 토픽을 더 구체적으로 입력해 주세요.",
             False,
         )
         return

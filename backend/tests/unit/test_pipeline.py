@@ -233,7 +233,7 @@ def test_pipeline_filters_hallucinated_ids_and_never_passes_hypotheses_to_p8() -
     assert progress[-1].stage.value == "save"
 
 
-def test_pipeline_returns_no_articles_only_after_the_fallback_search_is_empty(caplog) -> None:
+def test_pipeline_returns_search_no_hits_only_after_the_fallback_search_is_empty(caplog) -> None:
     repository = FakeRepository([])
     searcher = FakeSearcher(
         [
@@ -256,7 +256,7 @@ def test_pipeline_returns_no_articles_only_after_the_fallback_search_is_empty(ca
     with caplog.at_level(logging.INFO, logger="news_tls_agent.pipeline"):
         result = pipeline.generate("없는 기사")
 
-    assert result.status is GenerationStatus.NO_ARTICLES
+    assert result.status is GenerationStatus.SEARCH_NO_HITS
     assert result.rounds == 1
     assert repository.saved == []
     assert generator.prompts[ArticleSelection] == []
@@ -388,6 +388,47 @@ def test_pipeline_moves_to_next_search_after_selection_retry_rejects_all() -> No
     assert len(generator.prompts[ArticleSelection]) == 3
     assert "다른 지역 사건" in generator.prompts[ArticleSelection][1]
     assert len(generator.prompts[SufficiencyReview]) == 1
+
+
+def test_pipeline_returns_selection_rejected_all_after_bounded_rounds() -> None:
+    repository = FakeRepository([article(1), article(2)])
+    searcher = FakeSearcher(
+        [
+            SearchResult(
+                method=SearchMethod.KEYWORD,
+                hits=(SearchHit(article_id=1, score=4),),
+            ),
+            SearchResult(
+                method=SearchMethod.KEYWORD,
+                hits=(SearchHit(article_id=2, score=4),),
+            ),
+        ]
+    )
+    rejected_one = ArticleSelection(rejected=({"article_id": 1, "reason": "다른 사건"},))
+    rejected_two = ArticleSelection(rejected=({"article_id": 2, "reason": "근거 부족"},))
+    generator = ScriptedGenerator(
+        {
+            IntentInterpretation: [intent()],
+            HypotheticalTimeline: [hypothetical()],
+            SearchQueryDraft: [draft(), draft()],
+            ArticleSelection: [rejected_one, rejected_one, rejected_two, rejected_two],
+        }
+    )
+    pipeline = TimelinePipeline(
+        repository,
+        searcher,
+        generator,
+        config(max_rounds=2),
+        sleeper=lambda _: None,
+    )
+
+    result = pipeline.generate("P4 전건 탈락")
+
+    assert result.status is GenerationStatus.SELECTION_REJECTED_ALL
+    assert result.termination is TerminationReason.CONVERGED
+    assert result.rounds == 2
+    assert repository.saved == []
+    assert len(generator.prompts[ArticleSelection]) == 4
 
 
 def test_pipeline_does_not_converge_when_each_round_selects_a_different_id() -> None:
@@ -541,7 +582,7 @@ def test_pipeline_returns_one_clarification_and_respects_the_cap() -> None:
 
     capped_result = capped_pipeline.generate("탄핵", clarification_count=2)
 
-    assert capped_result.status is GenerationStatus.NO_ARTICLES
+    assert capped_result.status is GenerationStatus.SEARCH_NO_HITS
     assert len(capped.prompts[HypotheticalTimeline]) == 1
 
 
@@ -598,7 +639,7 @@ def test_pipeline_retries_an_llm_failure_once() -> None:
 
     result = pipeline.generate("재시도")
 
-    assert result.status is GenerationStatus.NO_ARTICLES
+    assert result.status is GenerationStatus.SEARCH_NO_HITS
     assert len(generator.prompts[IntentInterpretation]) == 2
     assert delays == [1]
 
@@ -809,7 +850,7 @@ def test_pipeline_keeps_first_search_period_when_user_specified_a_date() -> None
 
     result = pipeline.generate("2025년 대통령 탄핵")
 
-    assert result.status is GenerationStatus.NO_ARTICLES
+    assert result.status is GenerationStatus.SEARCH_NO_HITS
     assert searcher.requests[0].options.date_from == date(2025, 1, 1)
     assert searcher.requests[0].options.date_to == date(2025, 1, 31)
 

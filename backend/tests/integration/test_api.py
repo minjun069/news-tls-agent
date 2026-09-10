@@ -164,6 +164,7 @@ def make_app(
     offline: bool = False,
     pipeline_error=None,
     graph_error=None,
+    generation_status=None,
 ):
     app = create_app()
     client = OfflineMCPClient() if offline else FakeMCPClient()
@@ -185,7 +186,9 @@ def make_app(
 
     app.dependency_overrides[providers.get_health_checker] = health_dependency
     app.dependency_overrides[providers.get_tool_client] = tool_dependency
-    status = GenerationStatus.NEEDS_CLARIFICATION if clarification else GenerationStatus.COMPLETED
+    status = generation_status or (
+        GenerationStatus.NEEDS_CLARIFICATION if clarification else GenerationStatus.COMPLETED
+    )
     app.dependency_overrides[providers.get_pipeline_factory] = pipeline_dependency
     app.dependency_overrides[providers.get_chat_agent] = agent_dependency
     app.dependency_overrides[providers.get_graph_factory] = graph_dependency
@@ -237,6 +240,31 @@ def test_generation_stream_ends_with_clarification() -> None:
 
     assert "event: clarify" in response.text
     assert '"attempt":2' in response.text
+    assert "event: done" not in response.text
+
+
+@pytest.mark.parametrize(
+    ("status", "reason"),
+    [
+        (GenerationStatus.SEARCH_NO_HITS, "search_no_hits"),
+        (GenerationStatus.SELECTION_REJECTED_ALL, "selection_rejected_all"),
+    ],
+)
+def test_generation_stream_distinguishes_no_search_hits_from_rejected_candidates(
+    status,
+    reason,
+) -> None:
+    response = asyncio.run(
+        request(
+            make_app(generation_status=status),
+            "POST",
+            "/issues",
+            json={"topic": "테스트"},
+        )
+    )
+
+    assert f'"reason":"{reason}"' in response.text
+    assert '"retryable":false' in response.text
     assert "event: done" not in response.text
 
 

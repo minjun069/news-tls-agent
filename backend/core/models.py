@@ -363,7 +363,8 @@ class GenerationStatus(StrEnum):
     COMPLETED = "completed"
     REUSED = "reused"
     NEEDS_CLARIFICATION = "needs_clarification"
-    NO_ARTICLES = "no_articles"
+    SEARCH_NO_HITS = "search_no_hits"
+    SELECTION_REJECTED_ALL = "selection_rejected_all"
 
 
 class PipelineProgress(DomainModel):
