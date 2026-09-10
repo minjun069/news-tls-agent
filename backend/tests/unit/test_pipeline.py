@@ -230,10 +230,16 @@ def test_pipeline_filters_hallucinated_ids_and_never_passes_hypotheses_to_p8() -
     assert progress[-1].stage.value == "save"
 
 
-def test_pipeline_stops_immediately_when_first_search_has_no_existing_articles() -> None:
+def test_pipeline_returns_no_articles_only_after_the_fallback_search_is_empty(caplog) -> None:
     repository = FakeRepository([])
     searcher = FakeSearcher(
-        [SearchResult(method=SearchMethod.KEYWORD, hits=(SearchHit(article_id=404, score=1),))]
+        [
+            SearchResult(
+                method=SearchMethod.KEYWORD,
+                hits=(SearchHit(article_id=404, score=1),),
+            ),
+            SearchResult(method=SearchMethod.HYBRID, hits=()),
+        ]
     )
     generator = ScriptedGenerator(
         {
@@ -244,12 +250,62 @@ def test_pipeline_stops_immediately_when_first_search_has_no_existing_articles()
     )
     pipeline = TimelinePipeline(repository, searcher, generator, config(), sleeper=lambda _: None)
 
-    result = pipeline.generate("없는 기사")
+    with caplog.at_level(logging.INFO, logger="news_tls_agent.pipeline"):
+        result = pipeline.generate("없는 기사")
 
     assert result.status is GenerationStatus.NO_ARTICLES
     assert result.rounds == 1
     assert repository.saved == []
     assert generator.prompts[ArticleSelection] == []
+    assert len(searcher.requests) == 2
+    fallback = searcher.requests[1]
+    assert fallback.method is SearchMethod.HYBRID
+    assert fallback.keyword_terms == ("없는 기사",)
+    assert fallback.semantic_text == "없는 기사"
+    assert fallback.options.date_from is None
+    assert fallback.options.date_to is None
+    result_attempts = [
+        record.search_attempt
+        for record in caplog.records
+        if getattr(record, "event_name", None) == "pipeline.search.result"
+    ]
+    assert result_attempts == ["primary", "fallback"]
+
+
+def test_pipeline_recovers_with_original_topic_hybrid_fallback() -> None:
+    repository = FakeRepository([article(1, published_on=date(2025, 3, 22))])
+    searcher = FakeSearcher(
+        [
+            SearchResult(method=SearchMethod.KEYWORD, hits=()),
+            SearchResult(
+                method=SearchMethod.HYBRID,
+                hits=(SearchHit(article_id=1, score=4),),
+            ),
+        ]
+    )
+    generator = ScriptedGenerator(
+        {
+            IntentInterpretation: [intent(user_specified_date=False)],
+            HypotheticalTimeline: [hypothetical()],
+            SearchQueryDraft: [draft()],
+            ArticleSelection: [ArticleSelection(selected=(selected(),))],
+            RelatedEvents: [RelatedEvents()],
+            SufficiencyReview: [SufficiencyReview(is_sufficient=True)],
+            MergedTimeline: [merged(1)],
+        }
+    )
+    pipeline = TimelinePipeline(repository, searcher, generator, config(), sleeper=lambda _: None)
+
+    result = pipeline.generate("영남권 산불")
+
+    assert result.status is GenerationStatus.COMPLETED
+    assert len(searcher.requests) == 2
+    fallback = searcher.requests[1]
+    assert fallback.method is SearchMethod.HYBRID
+    assert fallback.keyword_terms == ("영남권 산불",)
+    assert fallback.semantic_text == "영남권 산불"
+    assert fallback.options.date_from is None
+    assert fallback.options.date_to is None
 
 
 @pytest.mark.parametrize(
@@ -343,7 +399,12 @@ def test_pipeline_returns_one_clarification_and_respects_the_cap() -> None:
     )
     capped_pipeline = TimelinePipeline(
         repository,
-        FakeSearcher([SearchResult(method=SearchMethod.KEYWORD, hits=())]),
+        FakeSearcher(
+            [
+                SearchResult(method=SearchMethod.KEYWORD, hits=()),
+                SearchResult(method=SearchMethod.HYBRID, hits=()),
+            ]
+        ),
         capped,
         config(),
         sleeper=lambda _: None,
@@ -395,7 +456,12 @@ def test_pipeline_retries_an_llm_failure_once() -> None:
     delays = []
     pipeline = TimelinePipeline(
         FakeRepository([]),
-        FakeSearcher([SearchResult(method=SearchMethod.KEYWORD, hits=())]),
+        FakeSearcher(
+            [
+                SearchResult(method=SearchMethod.KEYWORD, hits=()),
+                SearchResult(method=SearchMethod.HYBRID, hits=()),
+            ]
+        ),
         generator,
         config(),
         sleeper=delays.append,
@@ -571,7 +637,12 @@ def test_pipeline_searches_full_archive_when_user_did_not_specify_a_date() -> No
 
 
 def test_pipeline_keeps_first_search_period_when_user_specified_a_date() -> None:
-    searcher = FakeSearcher([SearchResult(method=SearchMethod.KEYWORD, hits=())])
+    searcher = FakeSearcher(
+        [
+            SearchResult(method=SearchMethod.KEYWORD, hits=()),
+            SearchResult(method=SearchMethod.HYBRID, hits=()),
+        ]
+    )
     generator = ScriptedGenerator(
         {
             IntentInterpretation: [intent(user_specified_date=True)],

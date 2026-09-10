@@ -202,11 +202,14 @@ data: {"reason": "no_articles", "message": "관련 기사를 찾지 못했습니
 
 | reason | retryable | 관련 예외 |
 |---|---|---|
-| `no_articles` | false | EX-01, EX-02 |
+| `no_articles` | false | 첫 검색과 기간 없는 원 토픽 hybrid 복구 검색이 모두 0건인 EX-01, 또는 누적 선정 0건인 EX-02 |
 | `generation_failed` | true | EX-03, EX-05 |
 | `rate_limited` | true | EX-04 |
 
-`no_articles`와 `generation_failed`를 구분하는 이유는 사용자가 취할 다음 행동이 다르기 때문이다. 전자는 토픽을 바꿔야 하고 후자는 재시도하면 된다.
+`no_articles`는 첫 검색 0건만으로 반환하지 않는다. 서버가 원래 토픽으로 기간 없는 hybrid
+검색을 한 번 더 수행해도 MS-SQL 복원 기사가 없을 때 반환한다. `generation_failed`와 구분하는
+이유는 사용자가 취할 다음 행동이 다르기 때문이다. 전자는 토픽을 바꿔야 하고 후자는 재시도하면
+된다.
 
 ---
 
