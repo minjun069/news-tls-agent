@@ -16,6 +16,7 @@ from core.errors import LLMGenerationError, PipelineInvariantError
 from core.models import (
     AdditionalHypotheses,
     Article,
+    ArticleSearchRequest,
     ArticleSelection,
     EventArticleInput,
     GenerationStatus,
@@ -24,12 +25,14 @@ from core.models import (
     IntentInterpretation,
     IssueCreate,
     IssueEventInput,
+    KeywordOperator,
     MergedTimeline,
     PipelineProgress,
     PipelineStage,
     RejectedArticle,
     RelatedEvent,
     RelatedEvents,
+    SearchMethod,
     SearchOptions,
     SearchQueryDraft,
     SelectedArticle,
@@ -244,7 +247,7 @@ class TimelinePipeline:
                 }
             )
             logger.info(
-                "pipeline search request: run_id=%s round=%s method=%s "
+                "pipeline search request: run_id=%s round=%s attempt=primary method=%s "
                 "keywords=%s semantic=%s requested_period=%s..%s applied_period=%s..%s reason=%s",
                 run_id,
                 round_number,
@@ -260,6 +263,7 @@ class TimelinePipeline:
                     "event_name": "pipeline.search.request",
                     "run_id": run_id,
                     "round_number": round_number,
+                    "search_attempt": "primary",
                     "search_method": draft.method.value,
                     "keyword_terms": draft.keyword_terms,
                     "semantic_text": draft.semantic_text,
@@ -278,7 +282,8 @@ class TimelinePipeline:
                 [hit.article_id for hit in search_result.hits if hit.article_id not in rejected_ids]
             )
             logger.info(
-                "pipeline search result: run_id=%s round=%s qdrant_hits=%s mssql_articles=%s",
+                "pipeline search result: run_id=%s round=%s attempt=primary "
+                "qdrant_hits=%s mssql_articles=%s",
                 run_id,
                 round_number,
                 len(search_result.hits),
@@ -287,26 +292,75 @@ class TimelinePipeline:
                     "event_name": "pipeline.search.result",
                     "run_id": run_id,
                     "round_number": round_number,
+                    "search_attempt": "primary",
                     "qdrant_result_count": len(search_result.hits),
                     "mssql_restored_count": len(candidate_articles),
                 },
             )
             if round_number == 1 and not candidate_articles:
+                fallback_request = ArticleSearchRequest(
+                    method=SearchMethod.HYBRID,
+                    options=SearchOptions(top_k=self._config.search_top_k),
+                    keyword_terms=(topic,),
+                    keyword_operator=KeywordOperator.OR,
+                    semantic_text=topic,
+                )
                 logger.info(
-                    "pipeline terminated: run_id=%s round=1 reason=no_articles selected=0",
+                    "pipeline search request: run_id=%s round=1 attempt=fallback method=hybrid "
+                    "keywords=%s semantic=%s applied_period=None..None reason=first_search_empty",
                     run_id,
+                    fallback_request.keyword_terms,
+                    fallback_request.semantic_text,
                     extra={
-                        "event_name": "pipeline.terminated",
+                        "event_name": "pipeline.search.request",
                         "run_id": run_id,
                         "round_number": 1,
-                        "termination_reason": GenerationStatus.NO_ARTICLES.value,
-                        "selected_article_count": 0,
+                        "search_attempt": "fallback",
+                        "search_method": SearchMethod.HYBRID.value,
+                        "keyword_terms": fallback_request.keyword_terms,
+                        "semantic_text": fallback_request.semantic_text,
+                        "requested_date_from": None,
+                        "requested_date_to": None,
+                        "applied_date_from": None,
+                        "applied_date_to": None,
+                        "search_reason": "first_search_empty",
                     },
                 )
-                return TimelineGenerationResult(
-                    status=GenerationStatus.NO_ARTICLES,
-                    rounds=1,
+                search_result = self._searcher.search_request(fallback_request)
+                candidate_articles = self._repository.get_articles(
+                    [hit.article_id for hit in search_result.hits]
                 )
+                logger.info(
+                    "pipeline search result: run_id=%s round=1 attempt=fallback "
+                    "qdrant_hits=%s mssql_articles=%s",
+                    run_id,
+                    len(search_result.hits),
+                    len(candidate_articles),
+                    extra={
+                        "event_name": "pipeline.search.result",
+                        "run_id": run_id,
+                        "round_number": 1,
+                        "search_attempt": "fallback",
+                        "qdrant_result_count": len(search_result.hits),
+                        "mssql_restored_count": len(candidate_articles),
+                    },
+                )
+                if not candidate_articles:
+                    logger.info(
+                        "pipeline terminated: run_id=%s round=1 reason=no_articles selected=0",
+                        run_id,
+                        extra={
+                            "event_name": "pipeline.terminated",
+                            "run_id": run_id,
+                            "round_number": 1,
+                            "termination_reason": GenerationStatus.NO_ARTICLES.value,
+                            "selected_article_count": 0,
+                        },
+                    )
+                    return TimelineGenerationResult(
+                        status=GenerationStatus.NO_ARTICLES,
+                        rounds=1,
+                    )
 
             candidate_years = sorted({article.service_date.year for article in candidate_articles})
             if (
