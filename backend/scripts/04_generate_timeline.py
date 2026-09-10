@@ -77,7 +77,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(result.model_dump_json())
     if result.status is GenerationStatus.NEEDS_CLARIFICATION:
         return 2
-    if result.status is GenerationStatus.NO_ARTICLES:
+    if result.status in {
+        GenerationStatus.SEARCH_NO_HITS,
+        GenerationStatus.SELECTION_REJECTED_ALL,
+    }:
         return 3
     return 0
 

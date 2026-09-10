@@ -197,22 +197,24 @@ data: {"question": "어느 시점의 계엄 관련 사건을 말씀하시나요?
 
 ```
 event: error
-data: {"reason": "no_articles", "message": "관련 기사를 찾지 못했습니다.", "retryable": false}
+data: {"reason": "search_no_hits", "message": "검색 결과가 없습니다. 기간이나 핵심어를 바꿔 주세요.", "retryable": false}
 ```
 
 | reason | retryable | 관련 예외 |
 |---|---|---|
-| `no_articles` | false | 첫 검색과 기간 없는 원 토픽 hybrid 복구 검색이 모두 0건인 EX-01, 또는 누적 선정 0건인 EX-02 |
+| `search_no_hits` | false | 첫 검색과 기간 없는 원 토픽 hybrid 복구 검색이 모두 0건인 EX-01 |
+| `selection_rejected_all` | false | 검색 후보는 있었지만 P4 수정 요청과 다음 검색 뒤에도 누적 선정이 0건인 EX-02 |
 | `generation_failed` | true | EX-03, EX-05 |
 | `rate_limited` | true | 429 재호출도 실패한 EX-04. `retry_after_seconds`가 있으면 다음 대기 초를 함께 반환한다. |
 | `model_unavailable` | false | 설정 모델이 현재 API에서 404인 모델 설정 오류 |
 | `model_unavailable` | true | 503을 총 4회 호출한 뒤에도 사용할 수 없는 일시 오류 |
 | `output_validation_failed` | true | Pydantic 구조 검증에 실패해 결과를 저장하지 않은 출력 오류 |
 
-`no_articles`는 첫 검색 0건만으로 반환하지 않는다. 서버가 원래 토픽으로 기간 없는 hybrid
-검색을 한 번 더 수행해도 MS-SQL 복원 기사가 없을 때 반환한다. `generation_failed`와 구분하는
-이유는 사용자가 취할 다음 행동이 다르기 때문이다. 전자는 토픽을 바꿔야 하고 후자는 재시도하면
-된다.
+`search_no_hits`는 첫 검색 0건만으로 반환하지 않는다. 서버가 원래 토픽으로 기간 없는 hybrid
+검색을 한 번 더 수행해도 MS-SQL 복원 기사가 없을 때만 반환한다. 후보가 있었지만 P4가 끝까지
+채택하지 않은 `selection_rejected_all`과 구분해 운영 로그와 화면에서 검색·선정 실패를 식별한다.
+두 오류는 같은 요청을 재시도하지 않고 토픽 수정을 안내한다. 모델·출력 오류는 `retryable` 값에
+따라 같은 요청의 재시도 버튼을 표시한다.
 
 ---
 

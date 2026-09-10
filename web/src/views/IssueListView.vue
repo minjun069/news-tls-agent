@@ -2,11 +2,12 @@
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { createIssue, listIssues } from '../api/client'
+import { presentStreamError } from '../api/streamErrors'
+import type { StreamErrorAction } from '../api/streamErrors'
 import type {
   GenerationRequest,
   GenerationStage,
   IssueSummary,
-  StreamError,
 } from '../api/types'
 import { formatDateTime } from '../utils/format'
 
@@ -16,10 +17,11 @@ const loadingIssues = ref(true)
 const listError = ref('')
 
 const topic = ref('')
+const topicInput = ref<HTMLInputElement | null>(null)
 const pending = ref(false)
 const progress = ref<GenerationStage | null>(null)
 const generationError = ref('')
-const retryable = ref(false)
+const generationErrorAction = ref<StreamErrorAction>('none')
 const clarificationQuestion = ref('')
 const clarificationReply = ref('')
 const clarificationAttempt = ref(0)
@@ -33,19 +35,6 @@ const progressCopy = computed(() => {
   const count = current.selected ?? current.found
   return `${round}${current.message}${count === undefined ? '' : ` · 기사 ${count}건 확보`}`
 })
-
-function generationErrorCopy(error: StreamError): string {
-  if (error.reason === 'no_articles') {
-    return '관련 기사를 찾지 못했습니다. 다른 토픽으로 시도해 보세요.'
-  }
-  if (error.reason === 'generation_failed') {
-    return '생성에 실패했습니다. 다시 시도할 수 있습니다.'
-  }
-  if (error.reason === 'rate_limited') {
-    return '요청이 많아 잠시 후 다시 시도해 주세요.'
-  }
-  return error.message || '요청을 처리하지 못했습니다.'
-}
 
 async function loadIssues() {
   loadingIssues.value = true
@@ -63,7 +52,7 @@ async function runGeneration(request: GenerationRequest) {
   pending.value = true
   progress.value = { stage: 'intent', message: '요청을 준비하는 중' }
   generationError.value = ''
-  retryable.value = false
+  generationErrorAction.value = 'none'
   clarificationQuestion.value = ''
   lastRequest.value = request
 
@@ -81,15 +70,16 @@ async function runGeneration(request: GenerationRequest) {
         void router.push(`/issues/${event.issue_id}`)
       },
       error: (event) => {
-        generationError.value = generationErrorCopy(event)
-        retryable.value = event.retryable
+        const presentation = presentStreamError(event)
+        generationError.value = presentation.message
+        generationErrorAction.value = presentation.action
         progress.value = null
       },
     })
   } catch (caught) {
     generationError.value =
       caught instanceof Error ? caught.message : 'API 서버에 연결하지 못했습니다.'
-    retryable.value = true
+    generationErrorAction.value = 'retry'
     progress.value = null
   } finally {
     pending.value = false
@@ -119,6 +109,12 @@ function retryGeneration() {
   if (lastRequest.value) void runGeneration(lastRequest.value)
 }
 
+function editTopic() {
+  generationError.value = ''
+  generationErrorAction.value = 'none'
+  topicInput.value?.focus()
+}
+
 onMounted(loadIssues)
 </script>
 
@@ -140,6 +136,7 @@ onMounted(loadIssues)
           <div class="topic-input-row">
             <input
               id="topic"
+              ref="topicInput"
               v-model="topic"
               type="text"
               maxlength="500"
@@ -189,7 +186,20 @@ onMounted(loadIssues)
 
         <div v-if="generationError" class="generation-error" role="alert">
           <p>{{ generationError }}</p>
-          <button v-if="retryable" type="button" @click="retryGeneration">다시 시도</button>
+          <button
+            v-if="generationErrorAction === 'edit_topic'"
+            type="button"
+            @click="editTopic"
+          >
+            토픽 수정
+          </button>
+          <button
+            v-else-if="generationErrorAction === 'retry'"
+            type="button"
+            @click="retryGeneration"
+          >
+            다시 시도
+          </button>
         </div>
       </div>
     </section>
