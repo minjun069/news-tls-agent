@@ -78,7 +78,7 @@
 | DB 드라이버 | SQLAlchemy + pyodbc (ODBC Driver 18) | |
 | Vector DB | Qdrant | Docker 컨테이너 |
 | Search Engine | Qdrant BM25 · dense 벡터 · core RRF **3종 모두 구현** | 에이전트가 선택하거나 전부 수행 (NFR-04) |
-| AI | Google Gemini (`gemini-3.6-flash`) | 보유 키와 실제 API 가용성 기준 |
+| AI | Google Gemini (`gemini-3.5-flash-lite`) | 구조화 출력·함수 호출을 지원하는 안정 모델 |
 | Embedding | 로컬 `nlpai-lab/KURE-v1` (Gemini 선택 가능) | CPU 실측으로 1,024차원·정규화 계약 채택, [ADR-0008](../decisions/0008-local-kure-embedding.md) |
 | Agent | LangGraph 기반 LangChain `create_agent` | MCP 도구 호출·토큰 스트리밍 |
 | MCP | `mcp` v2 (`MCPServer`, `ClientSession`) + LangChain 도구 브리지 | stdio 전송, [ADR-0006](../decisions/0006-mcp-v2-langchain-tool-bridge.md) |
@@ -258,8 +258,15 @@ docker compose --profile full up -d
 `docker-compose.yml`에서 `qdrant`만 프로필이 없고, `mssql`·`api`·`mcp`·`web`은 `full` 프로필에 속한다.
 따라서 모드 A에서는 Qdrant만 뜬다 — ADR-0002의 "MS-SQL은 네이티브"가 유지된다.
 
-모드 B의 API와 독립 MCP 컨테이너는 `embedding-models` 볼륨을 `/app/models`에 함께 마운트한다.
-KURE-v1을 한 컨테이너가 처음 내려받은 뒤 다른 컨테이너와 재기동에서도 같은 모델 캐시를 쓴다.
+모드 A의 로컬 프로세스는 Hugging Face 기본 호스트 캐시를 사용한다. 현재 개발 환경에는
+`/home/ssafy/.cache/huggingface/hub/models--nlpai-lab--KURE-v1`이 약 2.2GB로 준비돼 있다.
+시작 시 Hugging Face 메타데이터 확인 요청이 발생할 수 있으며, 캐시가 있어도 2.2GB 가중치를
+메모리에 올리는 CPU 초기화에는 시간이 걸린다. 메타데이터 요청이나 긴 초기화를 모델 본체의
+최초 다운로드로 판정하지 않는다.
+
+모드 B의 API와 독립 MCP 컨테이너는 호스트 캐시를 직접 쓰지 않고 `embedding-models` 볼륨을
+`/app/models`에 함께 마운트한다. 이 Docker 볼륨이 비어 있을 때만 KURE-v1을 처음 내려받으며,
+한 컨테이너가 준비한 뒤에는 다른 컨테이너와 재기동에서도 같은 모델 캐시를 쓴다.
 
 모드 B에서는 `migrate`가 MS-SQL 헬스 통과 뒤 스키마를 적용하고 성공 종료한 다음 `api`와
 `mcp`가 시작한다. `web`은 API 헬스 통과 뒤 시작한다. API 컨테이너는 stdio MCP 모듈을 자식

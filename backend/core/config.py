@@ -181,7 +181,7 @@ def load_gemini_config(env: Mapping[str, str]) -> GeminiConfig:
     """Gemini 생성·임베딩 어댑터의 공용 설정을 읽는다."""
     return GeminiConfig(
         api_key=_required(env, "GOOGLE_API_KEY"),
-        model=_optional(env, "GEMINI_MODEL", "gemini-3.6-flash"),
+        model=_optional(env, "GEMINI_MODEL", "gemini-3.5-flash-lite"),
         embedding_model=_optional(env, "GEMINI_EMBEDDING_MODEL", "gemini-embedding-2"),
         embedding_dimensions=_positive_int(env, "GEMINI_EMBEDDING_DIMENSIONS", 3072),
         rate_limit_max_attempts=2,

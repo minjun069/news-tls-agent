@@ -22,10 +22,10 @@ def required_env() -> dict[str, str]:
     }
 
 
-def test_s5_defaults_use_verified_models_and_loop_limits() -> None:
+def test_s5_defaults_use_configured_models_and_loop_limits() -> None:
     settings = load_settings(required_env())
 
-    assert settings.gemini.model == "gemini-3.6-flash"
+    assert settings.gemini.model == "gemini-3.5-flash-lite"
     assert settings.gemini.embedding_model == "gemini-embedding-2"
     assert settings.gemini.embedding_dimensions == 3072
     assert settings.gemini.rate_limit_max_attempts == 2
