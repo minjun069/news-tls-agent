@@ -38,6 +38,8 @@ class GeminiConfig:
     model: str
     embedding_model: str
     embedding_dimensions: int
+    rate_limit_max_attempts: int = 2
+    service_unavailable_max_attempts: int = 4
 
 
 @dataclass(frozen=True)
@@ -182,6 +184,8 @@ def load_gemini_config(env: Mapping[str, str]) -> GeminiConfig:
         model=_optional(env, "GEMINI_MODEL", "gemini-3.6-flash"),
         embedding_model=_optional(env, "GEMINI_EMBEDDING_MODEL", "gemini-embedding-2"),
         embedding_dimensions=_positive_int(env, "GEMINI_EMBEDDING_DIMENSIONS", 3072),
+        rate_limit_max_attempts=2,
+        service_unavailable_max_attempts=4,
     )
 
 

@@ -12,7 +12,14 @@ from uuid import uuid4
 from pydantic import BaseModel
 
 from core.config import TimelineConfig
-from core.errors import LLMGenerationError, PipelineInvariantError
+from core.errors import (
+    LLMGenerationError,
+    LLMModelConfigurationError,
+    LLMOutputValidationError,
+    LLMRateLimitError,
+    LLMServiceUnavailableError,
+    PipelineInvariantError,
+)
 from core.models import (
     AdditionalHypotheses,
     Article,
@@ -744,6 +751,13 @@ class TimelinePipeline:
             )
             try:
                 return self._generator.generate(prompt, response_type)
+            except (
+                LLMModelConfigurationError,
+                LLMOutputValidationError,
+                LLMRateLimitError,
+                LLMServiceUnavailableError,
+            ):
+                raise
             except LLMGenerationError:
                 if attempt == 1:
                     raise

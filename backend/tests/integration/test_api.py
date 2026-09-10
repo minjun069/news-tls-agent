@@ -5,10 +5,17 @@ from collections.abc import Mapping
 from datetime import date
 
 import httpx
+import pytest
 
 from api import providers
 from api.main import create_app
-from core.errors import DataAccessError
+from core.errors import (
+    DataAccessError,
+    LLMModelConfigurationError,
+    LLMOutputValidationError,
+    LLMRateLimitError,
+    LLMServiceUnavailableError,
+)
 from core.models import (
     ArticleGraph,
     ChatDone,
@@ -95,9 +102,10 @@ class OfflineMCPClient:
 
 
 class FakePipeline:
-    def __init__(self, progress_sink, status=GenerationStatus.COMPLETED):
+    def __init__(self, progress_sink, status=GenerationStatus.COMPLETED, error=None):
         self._progress_sink = progress_sink
         self._status = status
+        self._error = error
 
     async def generate(self, topic, *, clarification_answer=None, clarification_count=0):
         assert topic
@@ -108,6 +116,8 @@ class FakePipeline:
                 selected_article_count=2,
             )
         )
+        if self._error is not None:
+            raise self._error
         if self._status is GenerationStatus.NEEDS_CLARIFICATION:
             return TimelineGenerationResult(
                 status=self._status,
@@ -130,12 +140,15 @@ class FakeAgent:
 
 
 class FakeGraphService:
-    def __init__(self, progress_sink) -> None:
+    def __init__(self, progress_sink, error=None) -> None:
         self._progress_sink = progress_sink
+        self._error = error
 
     async def build(self, issue_id: int):
         assert issue_id == 7
         self._progress_sink(GraphProgress(remaining=1))
+        if self._error is not None:
+            raise self._error
         return (
             ArticleGraph(
                 article_id=10,
@@ -145,7 +158,13 @@ class FakeGraphService:
         )
 
 
-def make_app(*, clarification: bool = False, offline: bool = False):
+def make_app(
+    *,
+    clarification: bool = False,
+    offline: bool = False,
+    pipeline_error=None,
+    graph_error=None,
+):
     app = create_app()
     client = OfflineMCPClient() if offline else FakeMCPClient()
 
@@ -156,13 +175,13 @@ def make_app(*, clarification: bool = False, offline: bool = False):
         return client
 
     async def pipeline_dependency():
-        return lambda sink: FakePipeline(sink, status)
+        return lambda sink: FakePipeline(sink, status, pipeline_error)
 
     async def agent_dependency():
         return FakeAgent()
 
     async def graph_dependency():
-        return lambda sink: FakeGraphService(sink)
+        return lambda sink: FakeGraphService(sink, graph_error)
 
     app.dependency_overrides[providers.get_health_checker] = health_dependency
     app.dependency_overrides[providers.get_tool_client] = tool_dependency
@@ -221,6 +240,35 @@ def test_generation_stream_ends_with_clarification() -> None:
     assert "event: done" not in response.text
 
 
+def output_validation_error() -> LLMOutputValidationError:
+    return LLMOutputValidationError(
+        "invalid output",
+        response_type="Probe",
+        validation_error="invalid",
+        raw_output={},
+    )
+
+
+@pytest.mark.parametrize(
+    ("error", "reason", "retryable"),
+    [
+        (LLMModelConfigurationError("missing model"), "model_unavailable", False),
+        (LLMServiceUnavailableError("service unavailable"), "model_unavailable", True),
+        (output_validation_error(), "output_validation_failed", True),
+        (LLMRateLimitError("rate limit", retry_after_seconds=9), "rate_limited", True),
+    ],
+)
+def test_generation_stream_distinguishes_model_failures(error, reason, retryable) -> None:
+    response = asyncio.run(
+        request(make_app(pipeline_error=error), "POST", "/issues", json={"topic": "테스트"})
+    )
+
+    assert f'"reason":"{reason}"' in response.text
+    assert f'"retryable":{str(retryable).lower()}' in response.text
+    if isinstance(error, LLMRateLimitError):
+        assert '"retry_after_seconds":9' in response.text
+
+
 def test_chat_stream_distinguishes_source_and_citations() -> None:
     response = asyncio.run(
         request(make_app(), "POST", "/issues/7/chat", json={"message": "무슨 일이야?"})
@@ -250,6 +298,22 @@ def test_graph_stream_reports_extraction_and_article_attribution() -> None:
     assert "event: done" in response.text
     assert '"article_id":10' in response.text
     assert '"article_service_date":"2026-09-04"' in response.text
+
+
+@pytest.mark.parametrize(
+    ("error", "reason", "retryable"),
+    [
+        (LLMModelConfigurationError("missing model"), "model_unavailable", False),
+        (LLMServiceUnavailableError("service unavailable"), "model_unavailable", True),
+        (output_validation_error(), "output_validation_failed", True),
+        (LLMRateLimitError("rate limit"), "rate_limited", True),
+    ],
+)
+def test_graph_stream_distinguishes_model_failures(error, reason, retryable) -> None:
+    response = asyncio.run(request(make_app(graph_error=error), "GET", "/issues/7/graph"))
+
+    assert f'"reason":"{reason}"' in response.text
+    assert f'"retryable":{str(retryable).lower()}' in response.text
 
 
 def test_export_endpoint_uses_shared_exporter() -> None:

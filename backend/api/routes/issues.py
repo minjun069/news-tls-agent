@@ -13,7 +13,14 @@ from pydantic import BaseModel, Field
 
 from api.providers import PipelineFactory, get_pipeline_factory, get_tool_client
 from api.routes import encode_sse
-from core.errors import DataAccessError, LLMRateLimitError, TimelineGenerationError
+from core.errors import (
+    DataAccessError,
+    LLMModelConfigurationError,
+    LLMOutputValidationError,
+    LLMRateLimitError,
+    LLMServiceUnavailableError,
+    TimelineGenerationError,
+)
 from core.models import GenerationStatus, PipelineProgress, PipelineStage
 from core.ports import ToolClient
 
@@ -98,36 +105,51 @@ async def _generation_stream(
 
     try:
         result = await task
-    except LLMRateLimitError:
-        yield encode_sse(
-            "error",
-            {
-                "reason": "rate_limited",
-                "message": "외부 API 호출 한도를 초과했습니다.",
-                "retryable": True,
-            },
+    except LLMModelConfigurationError:
+        yield _generation_error(
+            "model_unavailable",
+            "설정한 모델을 사용할 수 없습니다. 관리자에게 문의해 주세요.",
+            False,
+        )
+        return
+    except LLMRateLimitError as exc:
+        payload = {
+            "reason": "rate_limited",
+            "message": "외부 API 호출 한도를 초과했습니다.",
+            "retryable": True,
+        }
+        if exc.retry_after_seconds is not None:
+            payload["retry_after_seconds"] = exc.retry_after_seconds
+        yield encode_sse("error", payload)
+        return
+    except LLMServiceUnavailableError:
+        yield _generation_error(
+            "model_unavailable",
+            "모델 서비스를 일시적으로 사용할 수 없습니다.",
+            True,
+        )
+        return
+    except LLMOutputValidationError:
+        yield _generation_error(
+            "output_validation_failed",
+            "모델 응답 형식을 확인하지 못했습니다.",
+            True,
         )
         return
     except TimelineGenerationError:
         logger.exception("타임라인 생성 실패")
-        yield encode_sse(
-            "error",
-            {
-                "reason": "generation_failed",
-                "message": "타임라인 생성에 실패했습니다.",
-                "retryable": True,
-            },
+        yield _generation_error(
+            "generation_failed",
+            "타임라인 생성에 실패했습니다.",
+            True,
         )
         return
     except Exception:
         logger.exception("타임라인 생성 중 예기치 않은 실패")
-        yield encode_sse(
-            "error",
-            {
-                "reason": "generation_failed",
-                "message": "타임라인 생성에 실패했습니다.",
-                "retryable": True,
-            },
+        yield _generation_error(
+            "generation_failed",
+            "타임라인 생성에 실패했습니다.",
+            True,
         )
         return
 
@@ -141,13 +163,10 @@ async def _generation_stream(
         )
         return
     if result.status is GenerationStatus.NO_ARTICLES:
-        yield encode_sse(
-            "error",
-            {
-                "reason": "no_articles",
-                "message": "관련 기사를 찾지 못했습니다.",
-                "retryable": False,
-            },
+        yield _generation_error(
+            "no_articles",
+            "관련 기사를 찾지 못했습니다.",
+            False,
         )
         return
     yield encode_sse(
@@ -156,6 +175,13 @@ async def _generation_stream(
             "issue_id": result.issue_id,
             "termination": result.termination.value if result.termination else None,
         },
+    )
+
+
+def _generation_error(reason: str, message: str, retryable: bool) -> str:
+    return encode_sse(
+        "error",
+        {"reason": reason, "message": message, "retryable": retryable},
     )
 
 

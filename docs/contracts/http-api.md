@@ -204,7 +204,10 @@ data: {"reason": "no_articles", "message": "관련 기사를 찾지 못했습니
 |---|---|---|
 | `no_articles` | false | 첫 검색과 기간 없는 원 토픽 hybrid 복구 검색이 모두 0건인 EX-01, 또는 누적 선정 0건인 EX-02 |
 | `generation_failed` | true | EX-03, EX-05 |
-| `rate_limited` | true | EX-04 |
+| `rate_limited` | true | 429 재호출도 실패한 EX-04. `retry_after_seconds`가 있으면 다음 대기 초를 함께 반환한다. |
+| `model_unavailable` | false | 설정 모델이 현재 API에서 404인 모델 설정 오류 |
+| `model_unavailable` | true | 503을 총 4회 호출한 뒤에도 사용할 수 없는 일시 오류 |
+| `output_validation_failed` | true | Pydantic 구조 검증에 실패해 결과를 저장하지 않은 출력 오류 |
 
 `no_articles`는 첫 검색 0건만으로 반환하지 않는다. 서버가 원래 토픽으로 기간 없는 hybrid
 검색을 한 번 더 수행해도 MS-SQL 복원 기사가 없을 때 반환한다. `generation_failed`와 구분하는
@@ -398,8 +401,11 @@ data: {"reason": "insufficient_events", "message": "그래프를 표시할 만�
 
 P9 관계 끝점 검증 실패는 잘못된 끝점을 넣은 교정 생성을 한 번 요청한다. 재실패해도 유효하지
 않은 관계만 안전하게 식별할 수 있으면 그 관계를 제외하고 기사 단위 결과를 저장하므로 요청을
-계속한다. 그 밖의 P9 호출이나 기사 단위 저장 실패는 `reason: "extraction_failed"`,
-`retryable: true`를 반환한다. 외부 API 호출 한도 초과는 `reason: "rate_limited"`로 구분한다.
+계속한다. 안전하게 복구할 수 없는 구조 검증 오류는 `reason: "output_validation_failed"`,
+`retryable: true`를 반환한다. 설정 모델이 404이면 `reason: "model_unavailable"`,
+`retryable: false`, 503 재시도를 소진하면 같은 reason과 `retryable: true`를 반환한다. 그 밖의
+P9 호출이나 기사 단위 저장 실패는 `reason: "extraction_failed"`, `retryable: true`다. 외부
+API 호출 한도 초과는 `reason: "rate_limited"`로 구분한다.
 서버 로그는 그래프 실행 ID와 실패 기사 ID, `ArticleGraphExtraction` 응답 타입 및 구조 검증
 오류를 남긴다. 관계를 제외한 경우 잘못된 끝점도 감사 로그에 남기며 기사 본문은 남기지 않는다.
 

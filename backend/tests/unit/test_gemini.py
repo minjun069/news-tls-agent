@@ -8,7 +8,13 @@ from google.genai import errors
 from pydantic import BaseModel
 
 from core.config import GeminiConfig
-from core.errors import LLMGenerationError, LLMOutputValidationError, LLMRateLimitError
+from core.errors import (
+    LLMGenerationError,
+    LLMModelConfigurationError,
+    LLMOutputValidationError,
+    LLMRateLimitError,
+    LLMServiceUnavailableError,
+)
 from core.models import ArticleGraphExtraction
 from infra.gemini import GeminiStructuredGenerator
 
@@ -18,19 +24,30 @@ class Probe(BaseModel):
 
 
 class FakeModels:
-    def __init__(self, response=None, error=None) -> None:
+    def __init__(self, response=None, error=None, outcomes=None) -> None:
         self.response = response
         self.error = error
+        self.outcomes = list(outcomes or [])
         self.calls = []
 
     def generate_content(self, **kwargs):
         self.calls.append(kwargs)
+        if self.outcomes:
+            outcome = self.outcomes.pop(0)
+            if isinstance(outcome, Exception):
+                raise outcome
+            return outcome
         if self.error is not None:
             raise self.error
         return self.response
 
 
-def generator(models: FakeModels) -> GeminiStructuredGenerator:
+def generator(
+    models: FakeModels,
+    *,
+    sleeper=lambda _delay: None,
+    jitter=lambda: 0.0,
+) -> GeminiStructuredGenerator:
     client = SimpleNamespace(models=models)
     config = GeminiConfig(
         api_key="test-key",
@@ -38,7 +55,7 @@ def generator(models: FakeModels) -> GeminiStructuredGenerator:
         embedding_model="embedding-test",
         embedding_dimensions=768,
     )
-    return GeminiStructuredGenerator(config, client=client)
+    return GeminiStructuredGenerator(config, client=client, sleeper=sleeper, jitter=jitter)
 
 
 def test_gemini_generator_uses_response_schema_and_returns_parsed_model() -> None:
@@ -83,11 +100,60 @@ def test_gemini_generator_preserves_response_type_raw_output_and_invalid_endpoin
     assert "없는 사건" in error.validation_error
 
 
-def test_gemini_generator_maps_rate_limit_separately() -> None:
-    models = FakeModels(error=errors.ClientError(429, {"error": {"message": "limit"}}))
+def api_error(code: int, *, retry_after: str | None = None) -> errors.APIError:
+    headers = {"Retry-After": retry_after} if retry_after is not None else None
+    response = httpx.Response(code, headers=headers)
+    error_type = errors.ServerError if code >= 500 else errors.ClientError
+    return error_type(code, {"error": {"message": "failure"}}, response)
 
-    with pytest.raises(LLMRateLimitError):
-        generator(models).generate("probe", Probe)
+
+def valid_response() -> SimpleNamespace:
+    return SimpleNamespace(parsed=Probe(ok=True), text=None)
+
+
+def test_gemini_generator_does_not_retry_missing_model() -> None:
+    delays: list[float] = []
+    models = FakeModels(error=api_error(404))
+
+    with pytest.raises(LLMModelConfigurationError, match="gemini-test"):
+        generator(models, sleeper=delays.append).generate("probe", Probe)
+
+    assert len(models.calls) == 1
+    assert delays == []
+
+
+def test_gemini_generator_obeys_retry_after_once() -> None:
+    delays: list[float] = []
+    models = FakeModels(outcomes=[api_error(429, retry_after="2.5"), valid_response()])
+
+    result = generator(models, sleeper=delays.append).generate("probe", Probe)
+
+    assert result.ok is True
+    assert len(models.calls) == 2
+    assert delays == [2.5]
+
+
+def test_gemini_generator_stops_after_two_rate_limit_calls() -> None:
+    delays: list[float] = []
+    models = FakeModels(outcomes=[api_error(429, retry_after="3"), api_error(429, retry_after="7")])
+
+    with pytest.raises(LLMRateLimitError) as caught:
+        generator(models, sleeper=delays.append).generate("probe", Probe)
+
+    assert len(models.calls) == 2
+    assert delays == [3.0]
+    assert caught.value.retry_after_seconds == 7.0
+
+
+def test_gemini_generator_retries_service_unavailable_four_calls_with_backoff() -> None:
+    delays: list[float] = []
+    models = FakeModels(outcomes=[api_error(503) for _ in range(4)])
+
+    with pytest.raises(LLMServiceUnavailableError):
+        generator(models, sleeper=delays.append, jitter=lambda: 0.25).generate("probe", Probe)
+
+    assert len(models.calls) == 4
+    assert delays == [1.25, 2.25, 4.25]
 
 
 def test_gemini_generator_maps_transport_failure_for_pipeline_retry() -> None:

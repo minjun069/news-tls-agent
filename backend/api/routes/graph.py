@@ -16,7 +16,10 @@ from core.errors import (
     GraphExtractionError,
     InsufficientEventsError,
     IssueNotFoundError,
+    LLMModelConfigurationError,
+    LLMOutputValidationError,
     LLMRateLimitError,
+    LLMServiceUnavailableError,
 )
 from core.models import ArticleGraph, GraphProgress
 
@@ -67,8 +70,29 @@ async def _graph_stream(issue_id: int, graph_factory: GraphFactory) -> AsyncIter
             False,
         )
         return
+    except LLMModelConfigurationError:
+        yield _graph_error(
+            "model_unavailable",
+            "설정한 모델을 사용할 수 없습니다. 관리자에게 문의해 주세요.",
+            False,
+        )
+        return
     except LLMRateLimitError:
         yield _graph_error("rate_limited", "요청이 많아 잠시 후 다시 시도해 주세요.", True)
+        return
+    except LLMServiceUnavailableError:
+        yield _graph_error(
+            "model_unavailable",
+            "모델 서비스를 일시적으로 사용할 수 없습니다.",
+            True,
+        )
+        return
+    except LLMOutputValidationError:
+        yield _graph_error(
+            "output_validation_failed",
+            "모델 응답 형식을 확인하지 못했습니다.",
+            True,
+        )
         return
     except GraphExtractionError:
         logger.exception("지식 그래프 추출·저장 실패")
